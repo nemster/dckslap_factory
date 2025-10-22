@@ -62,6 +62,7 @@ CALL_METHOD
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "mint_dckslapper"
+    "<IMAGE_URL>"
     Array<Address>(
         Address("<ACCOUNT_ADDRESS>")
     )
@@ -71,6 +72,7 @@ CALL_METHOD
 `<BOT_ACCOUNT_ADDRESS>`: address of the account used by the bot.  
 `<BOT_BADGE_ADDRESS>`: resource address of the bot badge specified when calling the `new` function.  
 `<COMPONENT_ADDRESS>`: the component created by the `new` function.  
+`<IMAGE_URL>`: the URL of the image to use as `key_image_url` in the NFT.  
 `<ACCOUNT_ADDRESS>`: the address of the account to send the `Dick Slapper` to.  
 
 This method emits a `DckslapperMintEvent` event for each recipient.  

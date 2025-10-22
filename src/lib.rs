@@ -372,7 +372,7 @@ mod dckslap_factory {
 
             let mut n = 1u64;
             let mut next_gbof_claim = self.gbof_first_claim;
-            while claims < next_gbof_claim {
+            while claims > next_gbof_claim {
                 next_gbof_claim += self.gbof_claim_increase + n * self.gbof_claim_increase_increase;
                 n += 1;
             }
