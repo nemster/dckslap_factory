@@ -61,7 +61,7 @@ mod dckslap_factory {
         gbof_first_claim: u64,
         gbof_claim_increase: u64,
         gbof_claim_increase_increase: u64,
-        number_of_dckslappers: u64,
+        next_dckslapper_id: u64,
         accounts: KeyValueStore<u64, Global<Account>>,
     }
 
@@ -216,7 +216,7 @@ mod dckslap_factory {
                 gbof_first_claim: gbof_first_claim,
                 gbof_claim_increase: gbof_claim_increase,
                 gbof_claim_increase_increase: gbof_claim_increase_increase,
-                number_of_dckslappers: 0u64,
+                next_dckslapper_id: 1u64,
                 accounts: KeyValueStore::new_with_registered_type(),
             }
                 .instantiate()
@@ -256,7 +256,7 @@ mod dckslap_factory {
             let mut dckslapper_sent = 0u64;
 
             for (i, account) in recipients.iter_mut().enumerate() {
-                let id = self.number_of_dckslappers + i as u64;
+                let id = self.next_dckslapper_id + i as u64;
 
                 let dckslapper_bucket = self.dckslapper_resource_manager.mint_non_fungible(
                     &NonFungibleLocalId::integer(id),
@@ -298,7 +298,7 @@ mod dckslap_factory {
                 "No Dick Slapper sent"
             );
 
-            self.number_of_dckslappers += recipients.len() as u64;
+            self.next_dckslapper_id += recipients.len() as u64;
         }
 
         /* Claim DCKSLAP and eventually GBOF
