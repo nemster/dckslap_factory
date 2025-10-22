@@ -163,7 +163,7 @@ mod dckslap_factory {
                     minter_updater => rule!(require(admin_badge_address));
                 ))
                 .burn_roles(burn_roles!(
-                    burner => rule!(deny_all);
+                    burner => rule!(require(global_caller(component_address)));
                     burner_updater => rule!(require(admin_badge_address));
                 ))
                 .withdraw_roles(withdraw_roles!(
@@ -210,36 +210,56 @@ mod dckslap_factory {
         pub fn mint_dckslapper(
             &mut self,
             key_image_url: Url,
-            mut recipient: Global<Account>,
+            mut recipients: Vec<Global<Account>>,
         ) {
-            self.number_of_dckslappers += 1u64;
+            let never = Instant::new(0i64);
 
-            let dckslapper_bucket = self.dckslapper_resource_manager.mint_non_fungible(
-                &NonFungibleLocalId::integer(self.number_of_dckslappers),
-                DckSlapper {
-                    key_image_url: key_image_url,
-                    has_dicks: true,
-                    last_claim_time: Instant::new(0i64),
-                    claims: 0u64,
+            let mut dckslapper_sent = 0u64;
+
+            for (i, account) in recipients.iter_mut().enumerate() {
+                let id = self.number_of_dckslappers + i as u64;
+
+                let dckslapper_bucket = self.dckslapper_resource_manager.mint_non_fungible(
+                    &NonFungibleLocalId::integer(id),
+                    DckSlapper {
+                        key_image_url: key_image_url.clone(),
+                        has_dicks: true,
+                        last_claim_time: never,
+                        claims: 0u64,
+                    }
+                );
+
+                let refund = account.try_deposit_or_refund(
+                    dckslapper_bucket.into(),
+                    None
+                );
+
+                match refund {
+                    Some(bucket) => bucket.burn(),
+                    None => {
+                        Runtime::emit_event(
+                           DckslapperMintEvent {
+                                id: id,
+                                account: *account,
+                            }
+                        );
+
+                        dckslapper_sent += 1u64;
+
+                        self.accounts.insert(
+                            id,
+                            *account
+                        );
+                    }
                 }
+            }
+
+            assert!(
+                dckslapper_sent > 0,
+                "No Dick Slapper sent"
             );
 
-            recipient.try_deposit_or_abort(
-                dckslapper_bucket.into(),
-                None
-            );
-
-            Runtime::emit_event(
-                DckslapperMintEvent {
-                    id: self.number_of_dckslappers,
-                    account: recipient,
-                }
-            );
-
-            self.accounts.insert(
-                self.number_of_dckslappers,
-                recipient
-            );
+            self.number_of_dckslappers += recipients.len() as u64;
         }
 
         pub fn claim(
