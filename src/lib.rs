@@ -67,6 +67,32 @@ mod dckslap_factory {
 
     impl DckslapFactory {
 
+        /* Instatiates a new DckslapFactory component.
+         *
+         * Input parameters:
+         * - admin_badge_address: this resource address will be the owner of the component and
+         * the resources
+         * - bot_badge_address: a proof of this resource address will be needed to call the
+         * mint_dckslapper method
+         * - dckslap_initial_supply: the initial supply of DCKSLAP that will be returned by this
+         * function
+         * - gbof_initial_supply: the initial supply of GBOF that will be returned by this function
+         * - dckslap_per_claim: how many DCKSLAP distribute at each successful claim
+         * - claim_interval: interval in seconds between claims from the same account
+         * - gbof_per_claim: how many GBOF distribute at each distribution
+         * - gbof_first_claim: how many successful DCKSLAP claims are needed for the first GBOF
+         * distribution
+         * - gbof_claim_increase: fixed increase in claims for the next GBOF distribution
+         * - gbof_claim_increase_increase: variable increase in claims for the next GBOF
+         * distribution (this is multiplied by the number of distributions and summed to the
+         * fixed increase)
+         *
+         * Outputs:
+         * - the globalised DckslapFactory component
+         * - a bucket of DCKSLAP
+         * - a bucket of Great Ball Of Fire
+         * - the resource address of the Dick Slappers that will be minted by mint_dckslapper
+         */
         pub fn new(
             admin_badge_address: ResourceAddress,
             bot_badge_address: ResourceAddress,
@@ -82,6 +108,7 @@ mod dckslap_factory {
             Global<DckslapFactory>,
             FungibleBucket,
             FungibleBucket,
+            ResourceAddress,
         ) {
             let (address_reservation, component_address) =
                 Runtime::allocate_component_address(DckslapFactory::blueprint_id());
@@ -204,9 +231,21 @@ mod dckslap_factory {
                 dckslap_factory,
                 dckslap_bucket,
                 gbof_bucket,
+                dckslapper_resource_manager.address(),
             )
         }
 
+        /* Mints one or more Dick Slappers and sends them to the specified accounts
+         *
+         * Input parameters:
+         * - key_image_url: the image to set in the non fungible data of the Dick Slappers
+         * - recipients: a vector of accounts that will receive one Dick Slappers each
+         *
+         * Events: a DckslapperMintEvent for each successful distribution
+         *
+         * Note: unsuccessful distributions (because of accounts antispam settings) may cause a
+         * hole in the sequence of Dick Slappers ids
+         */
         pub fn mint_dckslapper(
             &mut self,
             key_image_url: Url,
@@ -262,6 +301,19 @@ mod dckslap_factory {
             self.number_of_dckslappers += recipients.len() as u64;
         }
 
+        /* Claim DCKSLAP and eventually GBOF
+         *
+         * Input parameters:
+         * - dckslapper_proof: a proof of ownership of a Dick Slapper
+         *
+         * Outputs:
+         * - a bucket of DCKSLAP
+         * - a bucket of GBOF or None
+         *
+         * Events:
+         * - a DckslapClaimEvent
+         * - eventually a GbofClaimEvent
+         * */
         pub fn claim(
             &mut self,
             dckslapper_proof: Proof,
