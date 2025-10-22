@@ -19,11 +19,13 @@ struct DckslapperMintEvent {
 
 #[derive(ScryptoSbor, ScryptoEvent)]
 struct DckslapClaimEvent {
+    account: Global<Account>,
     claims_from_account: u64,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
 struct GbofClaimEvent {
+    account: Global<Account>,
     claims_from_account: u64,
 }
 
@@ -32,6 +34,10 @@ struct GbofClaimEvent {
     DckslapperMintEvent,
     DckslapClaimEvent,
     GbofClaimEvent,
+)]
+#[types(
+    u64,
+    Global<Account>,
 )]
 mod dckslap_factory {
 
@@ -56,6 +62,7 @@ mod dckslap_factory {
         gbof_claim_increase: u64,
         gbof_claim_increase_increase: u64,
         number_of_dckslappers: u64,
+        accounts: KeyValueStore<u64, Global<Account>>,
     }
 
     impl DckslapFactory {
@@ -183,6 +190,7 @@ mod dckslap_factory {
                 gbof_claim_increase: gbof_claim_increase,
                 gbof_claim_increase_increase: gbof_claim_increase_increase,
                 number_of_dckslappers: 0u64,
+                accounts: KeyValueStore::new_with_registered_type(),
             }
                 .instantiate()
                 .prepare_to_globalize(OwnerRole::Updatable(rule!(require(admin_badge_address))))
@@ -226,6 +234,11 @@ mod dckslap_factory {
                     id: self.number_of_dckslappers,
                     account: recipient,
                 }
+            );
+
+            self.accounts.insert(
+                self.number_of_dckslappers,
+                recipient
             );
         }
 
@@ -272,8 +285,15 @@ mod dckslap_factory {
 
             let dckslap_bucket = self.dckslap_resource_manager.mint(self.dckslap_per_claim);
 
+            let id = match &non_fungible.local_id() {
+                NonFungibleLocalId::Integer(local_id) => local_id.value(),
+                _ => Runtime::panic("Incorrect proof".to_string()),
+            };
+            let account = self.accounts.get(&id).unwrap();
+
             Runtime::emit_event(
                 DckslapClaimEvent {
+                    account: *account,
                     claims_from_account: claims,
                 }
             );
@@ -288,6 +308,7 @@ mod dckslap_factory {
                 true => {
                     Runtime::emit_event(
                         GbofClaimEvent {
+                            account: *account,
                             claims_from_account: n,
                         }
                     );
