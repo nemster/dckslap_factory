@@ -1,11 +1,11 @@
 # DCKSLAP Factory
 
 DckslapFactory is a blueprint to manage the distribution of two fungibles (`DCKSLAP` and `GBOF`) and a non fungible (`Dck User Badge`) that is needed to keep track of users' claims.  
-DCKSLAP can be claimed periodically by the users who own the non fungible; the claim operation eventually returns some GBOF too.  
+`DCKSLAP` can be claimed periodically by the users who own the non fungible; the claim operation eventually returns some `GBOF` too.  
 The `claim_interval` set in the `new` method determines how often a user can do a claim.  
 
-The `gbof_first_claim`, `gbof_claim_increase` and `gbof_claim_increase_increase` parameters determine whether the claim returns GBOF too.  
-As an example setting `gbof_first_claim`=15, `gbof_claim_increase`=20 and `gbof_claim_increase_increase`=10, will make so that only the claims number 15, 15+20+10=45, 45+20+10+10=85, 85+20+10+10+10=135, ... will return GBOF (quadratic backoff).  
+The `gbof_first_claim`, `gbof_claim_increase` and `gbof_claim_increase_increase` parameters determine whether the claim returns `GBOF` too.  
+As an example setting `gbof_first_claim`=15, `gbof_claim_increase`=20 and `gbof_claim_increase_increase`=10, will make so that only the claims number 15, 15+20+10=45, 45+20+10+10=85, 85+20+10+10+10=135, ... will return `GBOF` (quadratic backoff).  
 
 Offchain script are needed to tell the component who to send the `Dck User Badge` to and to enable/disable them (`has_dicks` non fungible data).  
 The same `bot badge` is needed to update `Dck User Bagde` non fungible data and invoke the `mint_dckuserbadge` method.  
@@ -39,14 +39,14 @@ CALL_METHOD
 `<BLUEPRINT_ADDRESS>`: the address of the `DckslapFactory` blueprint.  
 `<ADMIN_BADGE_ADDRESS>`: this resource address will be the owner of the component and the resources.  
 `<BOT_BADGE_ADDRESS>`: a proof of this resource address will be needed to call the `mint_dckuserbadge` method.  
-`<DCKSLAP_INITIAL_SUPPLY>`: the initial supply of DCKSLAP that will be returned by this function.  
-`<GBOF_INITIAL_SUPPLY>`: the initial supply of GBOF that will be returned by this function.  
-`<DCKSLAP_PER_CLAIM>`: how many DCKSLAP distribute at each successful claim.  
+`<DCKSLAP_INITIAL_SUPPLY>`: the initial supply of `DCKSLAP` that will be returned by this function.  
+`<GBOF_INITIAL_SUPPLY>`: the initial supply of `GBOF` that will be returned by this function.  
+`<DCKSLAP_PER_CLAIM>`: how many `DCKSLAP` distribute at each successful claim.  
 `<CLAIM_INTERVAL>`: interval in seconds between claims from the same account.  
-`<GBOF_PER_CLAIM>`: how many GBOF distribute at each distribution.  
-`<GBOF_FIRST_CLAIM>`: how many successful DCKSLAP claims are needed for the first GBOF distribution.  
-`<GBOF_CLAIM_INCREASE>`: fixed increase in claims for the next GBOF distribution.  
-`<GBOF_CLAIM_INCREASE_INCREASE>`: variable increase in claims for the next GBOF distribution (this is multiplied by the number of distributions and summed to the fixed increase).  
+`<GBOF_PER_CLAIM>`: how many `GBOF` distribute at each distribution.  
+`<GBOF_FIRST_CLAIM>`: how many successful `DCKSLAP` claims are needed for the first GBOF distribution.  
+`<GBOF_CLAIM_INCREASE>`: fixed increase in claims for the next `GBOF` distribution.  
+`<GBOF_CLAIM_INCREASE_INCREASE>`: variable increase in claims for the next `GBOF` distribution (this is multiplied by the number of distributions and summed to the fixed increase).  
 `<ACCOUNT_ADDRESS>`: the account to deposit the initial supply in.  
 
 ## `mint_dckuserbadge`
@@ -116,4 +116,33 @@ This method fails if less than `claim_interval` seconds has passed since the las
 
 Upon success the `claim` method emits a `DckslapClaimEvent` event specifying the account address and the number of claims from this account.  
 If `GBOFs` are returned too, this method will emit a `GbofClaimEvent` event too specifying the account address and the number of times this account has received `GBOFs`.  
+
+## `mint`
+The admin can invoke this method to mint new `DCKSLAP` and/or `GBOF`.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<ADMIN_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "mint"
+    Decimal("<DCKSLAP_AMOUNT>")
+    Decimal("<GBOF_AMOUNT>")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>`: address of the admin account.  
+`<ADMIN_BADGE_ADDRESS>`: resource address of the admin badge.  
+`<COMPONENT_ADDRESS>`: the component created by the `new` function.  
+`<DCKSLAP_AMOUNT>`: the amount of `DCKSLAP` to mint.  
+`<GBOF_AMOUNT>`: the amount of `GBOF` to mint.  
 

@@ -48,6 +48,7 @@ mod dckslap_factory {
         methods {
             mint_dckuserbadge => restrict_to: [bot];
             claim => PUBLIC;
+            mint => restrict_to: [OWNER];
         }
     }
 
@@ -237,6 +238,8 @@ mod dckslap_factory {
 
         /* Mints one or more DckUserBadges and sends them to the specified accounts
          *
+         * You need the bot badge to invoke this method
+         *
          * Input parameters:
          * - key_image_url: the image to set in the non fungible data of the DckUserBadges
          * - recipients: a vector of accounts that will receive one DckUserBadges each
@@ -313,7 +316,7 @@ mod dckslap_factory {
          * Events:
          * - a DckslapClaimEvent
          * - eventually a GbofClaimEvent
-         * */
+         */
         pub fn claim(
             &mut self,
             dckuserbadge_proof: Proof,
@@ -397,5 +400,27 @@ mod dckslap_factory {
             )
         }
 
+        /* Mint DCKSLAP and GBOF
+         *
+         * You need the admin badge to invoke this method
+         *
+         * Input parameters:
+         * - dckslap_amount: the amount of DCKSLAP to mint
+         * - gbof_amount: the amount of GBOF to mint
+         *
+         * Outputs:
+         * - a bucket of DCKSLAP
+         * - a bucket of GBOF
+         */
+        pub fn mint(
+            &mut self,
+            dckslap_amount: Decimal,
+            gbof_amount: Decimal,
+        ) -> (FungibleBucket, FungibleBucket) {
+            (
+                self.dckslap_resource_manager.mint(dckslap_amount),
+                self.gbof_resource_manager.mint(gbof_amount)
+            )
+        }
     }
 }
