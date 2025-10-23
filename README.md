@@ -144,6 +144,7 @@ POP_FROM_AUTH_ZONE
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
+    "burn"
     Proof("dckuserbadge_proof")
     Bucket("dckslap")
 ;
