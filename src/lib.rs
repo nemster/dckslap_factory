@@ -1,7 +1,7 @@
 use scrypto::prelude::*;
 
 #[derive(ScryptoSbor, NonFungibleData)]
-struct DckSlapper {
+struct DckUserBadge {
     pub key_image_url: Url,
     #[mutable]
     pub has_dicks: bool,
@@ -12,7 +12,7 @@ struct DckSlapper {
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
-struct DckslapperMintEvent {
+struct DckUserBadgeMintEvent {
     id: u64,
     account: Global<Account>,
 }
@@ -31,7 +31,7 @@ struct GbofClaimEvent {
 
 #[blueprint]
 #[events(
-    DckslapperMintEvent,
+    DckUserBadgeMintEvent,
     DckslapClaimEvent,
     GbofClaimEvent,
 )]
@@ -46,7 +46,7 @@ mod dckslap_factory {
             bot => updatable_by: [OWNER];
         },
         methods {
-            mint_dckslapper => restrict_to: [bot];
+            mint_dckuserbadge => restrict_to: [bot];
             claim => PUBLIC;
         }
     }
@@ -54,14 +54,14 @@ mod dckslap_factory {
     struct DckslapFactory {
         dckslap_resource_manager: FungibleResourceManager,
         gbof_resource_manager: FungibleResourceManager,
-        dckslapper_resource_manager: NonFungibleResourceManager,
+        dckuserbadge_resource_manager: NonFungibleResourceManager,
         dckslap_per_claim: Decimal,
         claim_interval: i64,
         gbof_per_claim: Decimal,
         gbof_first_claim: u64,
         gbof_claim_increase: u64,
         gbof_claim_increase_increase: u64,
-        next_dckslapper_id: u64,
+        next_dckuserbadge_id: u64,
         accounts: KeyValueStore<u64, Global<Account>>,
     }
 
@@ -73,7 +73,7 @@ mod dckslap_factory {
          * - admin_badge_address: this resource address will be the owner of the component and
          * the resources
          * - bot_badge_address: a proof of this resource address will be needed to call the
-         * mint_dckslapper method
+         * mint_dckuserbadge method
          * - dckslap_initial_supply: the initial supply of DCKSLAP that will be returned by this
          * function
          * - gbof_initial_supply: the initial supply of GBOF that will be returned by this function
@@ -91,7 +91,7 @@ mod dckslap_factory {
          * - the globalised DckslapFactory component
          * - a bucket of DCKSLAP
          * - a bucket of Great Ball Of Fire
-         * - the resource address of the Dick Slappers that will be minted by mint_dckslapper
+         * - the resource address of the DckUserBadges that will be minted by mint_dckuserbadge
          */
         pub fn new(
             admin_badge_address: ResourceAddress,
@@ -171,7 +171,7 @@ mod dckslap_factory {
                 gbof_bucket.resource_address()
             );
 
-            let dckslapper_resource_manager = ResourceBuilder::new_integer_non_fungible::<DckSlapper>(
+            let dckuserbadge_resource_manager = ResourceBuilder::new_integer_non_fungible::<DckUserBadge>(
                 OwnerRole::Fixed(rule!(require(admin_badge_address)))
             )
                 .metadata(metadata!(
@@ -182,7 +182,7 @@ mod dckslap_factory {
                         metadata_locker_updater => rule!(require(admin_badge_address));
                     },
                     init {
-                        "name" => "Dick slapper", updatable;
+                        "name" => "Dck User Badge", updatable;
                     }
                 ))
                 .mint_roles(mint_roles!(
@@ -209,14 +209,14 @@ mod dckslap_factory {
             let dckslap_factory = Self {
                 dckslap_resource_manager: dckslap_resource_manager,
                 gbof_resource_manager: gbof_resource_manager,
-                dckslapper_resource_manager: dckslapper_resource_manager,
+                dckuserbadge_resource_manager: dckuserbadge_resource_manager,
                 dckslap_per_claim: dckslap_per_claim,
                 claim_interval: claim_interval,
                 gbof_per_claim: gbof_per_claim,
                 gbof_first_claim: gbof_first_claim,
                 gbof_claim_increase: gbof_claim_increase,
                 gbof_claim_increase_increase: gbof_claim_increase_increase,
-                next_dckslapper_id: 1u64,
+                next_dckuserbadge_id: 1u64,
                 accounts: KeyValueStore::new_with_registered_type(),
             }
                 .instantiate()
@@ -231,36 +231,36 @@ mod dckslap_factory {
                 dckslap_factory,
                 dckslap_bucket,
                 gbof_bucket,
-                dckslapper_resource_manager.address(),
+                dckuserbadge_resource_manager.address(),
             )
         }
 
-        /* Mints one or more Dick Slappers and sends them to the specified accounts
+        /* Mints one or more DckUserBadges and sends them to the specified accounts
          *
          * Input parameters:
-         * - key_image_url: the image to set in the non fungible data of the Dick Slappers
-         * - recipients: a vector of accounts that will receive one Dick Slappers each
+         * - key_image_url: the image to set in the non fungible data of the DckUserBadges
+         * - recipients: a vector of accounts that will receive one DckUserBadges each
          *
-         * Events: a DckslapperMintEvent for each successful distribution
+         * Events: a DckUserBadgeMintEvent for each successful distribution
          *
          * Note: unsuccessful distributions (because of accounts antispam settings) may cause a
-         * hole in the sequence of Dick Slappers ids
+         * hole in the sequence of DckUserBadges ids
          */
-        pub fn mint_dckslapper(
+        pub fn mint_dckuserbadge(
             &mut self,
             key_image_url: Url,
             mut recipients: Vec<Global<Account>>,
         ) {
             let never = Instant::new(0i64);
 
-            let mut dckslapper_sent = 0u64;
+            let mut dckuserbadge_sent = 0u64;
 
             for (i, account) in recipients.iter_mut().enumerate() {
-                let id = self.next_dckslapper_id + i as u64;
+                let id = self.next_dckuserbadge_id + i as u64;
 
-                let dckslapper_bucket = self.dckslapper_resource_manager.mint_non_fungible(
+                let dckuserbadge_bucket = self.dckuserbadge_resource_manager.mint_non_fungible(
                     &NonFungibleLocalId::integer(id),
-                    DckSlapper {
+                    DckUserBadge {
                         key_image_url: key_image_url.clone(),
                         has_dicks: true,
                         last_claim_time: never,
@@ -269,7 +269,7 @@ mod dckslap_factory {
                 );
 
                 let refund = account.try_deposit_or_refund(
-                    dckslapper_bucket.into(),
+                    dckuserbadge_bucket.into(),
                     None
                 );
 
@@ -277,13 +277,13 @@ mod dckslap_factory {
                     Some(bucket) => bucket.burn(),
                     None => {
                         Runtime::emit_event(
-                           DckslapperMintEvent {
+                           DckUserBadgeMintEvent {
                                 id: id,
                                 account: *account,
                             }
                         );
 
-                        dckslapper_sent += 1u64;
+                        dckuserbadge_sent += 1u64;
 
                         self.accounts.insert(
                             id,
@@ -294,17 +294,17 @@ mod dckslap_factory {
             }
 
             assert!(
-                dckslapper_sent > 0,
-                "No Dick Slapper sent"
+                dckuserbadge_sent > 0,
+                "No DckUserBadge sent"
             );
 
-            self.next_dckslapper_id += recipients.len() as u64;
+            self.next_dckuserbadge_id += recipients.len() as u64;
         }
 
         /* Claim DCKSLAP and eventually GBOF
          *
          * Input parameters:
-         * - dckslapper_proof: a proof of ownership of a Dick Slapper
+         * - dckuserbadge_proof: a proof of ownership of a DckUserBadge
          *
          * Outputs:
          * - a bucket of DCKSLAP
@@ -316,17 +316,17 @@ mod dckslap_factory {
          * */
         pub fn claim(
             &mut self,
-            dckslapper_proof: Proof,
+            dckuserbadge_proof: Proof,
         ) -> (
             FungibleBucket,
             Option<FungibleBucket>,
         ) {
-            let non_fungible = dckslapper_proof.check_with_message(
-                self.dckslapper_resource_manager.address(),
+            let non_fungible = dckuserbadge_proof.check_with_message(
+                self.dckuserbadge_resource_manager.address(),
                 "Incorrect proof",
             )
                 .as_non_fungible()
-                .non_fungible::<DckSlapper>();
+                .non_fungible::<DckUserBadge>();
 
             let non_fungible_data = non_fungible.data();
 
@@ -342,14 +342,14 @@ mod dckslap_factory {
                 "Too soon"
             );
 
-            self.dckslapper_resource_manager.update_non_fungible_data(
+            self.dckuserbadge_resource_manager.update_non_fungible_data(
                 &non_fungible.local_id(),
                 "last_claim_time",
                 now
             );
 
             let claims = non_fungible_data.claims + 1;
-            self.dckslapper_resource_manager.update_non_fungible_data(
+            self.dckuserbadge_resource_manager.update_non_fungible_data(
                 &non_fungible.local_id(),
                 "claims",
                 claims
