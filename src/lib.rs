@@ -9,6 +9,8 @@ struct DckUserBadge {
     pub last_claim_time: Instant,
     #[mutable]
     pub claims: u32,
+    #[mutable]
+    pub burned_dckslap: u32,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -29,11 +31,17 @@ struct GbofClaimEvent {
     claims_from_account: u32,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct DckslapGbofSwapEvent {
+    account: Global<Account>,
+}
+
 #[blueprint]
 #[events(
     DckUserBadgeMintEvent,
     DckslapClaimEvent,
     GbofClaimEvent,
+    DckslapGbofSwapEvent,
 )]
 #[types(
     u64,
@@ -48,6 +56,7 @@ mod dckslap_factory {
         methods {
             mint_dckuserbadge => restrict_to: [bot];
             claim => PUBLIC;
+            burn => PUBLIC;
             mint => restrict_to: [OWNER];
         }
     }
@@ -62,6 +71,7 @@ mod dckslap_factory {
         gbof_first_claim: u32,
         gbof_claim_increase: u32,
         gbof_claim_increase_increase: u32,
+        dckslap_per_gbof: u32,
         next_dckuserbadge_id: u64,
         accounts: KeyValueStore<u64, Global<Account>>,
     }
@@ -87,6 +97,7 @@ mod dckslap_factory {
          * - gbof_claim_increase_increase: variable increase in claims for the next GBOF
          * distribution (this is multiplied by the number of distributions and summed to the
          * fixed increase)
+         * - dckslap_per_gbof: how many DCKSLAP can be burned to get a GBOF
          *
          * Outputs:
          * - the globalised DckslapFactory component
@@ -105,6 +116,7 @@ mod dckslap_factory {
             gbof_first_claim: u32,
             gbof_claim_increase: u32,
             gbof_claim_increase_increase: u32,
+            dckslap_per_gbof: u32,
         ) -> (
             Global<DckslapFactory>,
             FungibleBucket,
@@ -217,6 +229,7 @@ mod dckslap_factory {
                 gbof_first_claim: gbof_first_claim,
                 gbof_claim_increase: gbof_claim_increase,
                 gbof_claim_increase_increase: gbof_claim_increase_increase,
+                dckslap_per_gbof: dckslap_per_gbof,
                 next_dckuserbadge_id: 1u64,
                 accounts: KeyValueStore::new_with_registered_type(),
             }
@@ -268,6 +281,7 @@ mod dckslap_factory {
                         has_dicks: true,
                         last_claim_time: never,
                         claims: 0u32,
+                        burned_dckslap: 0u32,
                     }
                 );
 
@@ -362,7 +376,7 @@ mod dckslap_factory {
 
             let id = match &non_fungible.local_id() {
                 NonFungibleLocalId::Integer(local_id) => local_id.value(),
-                _ => Runtime::panic("Incorrect proof".to_string()),
+                _ => Runtime::panic("Should not happen".to_string()),
             };
             let account = self.accounts.get(&id).unwrap();
 
@@ -398,6 +412,73 @@ mod dckslap_factory {
                 dckslap_bucket,
                 gbof_bucket,
             )
+        }
+
+        /* Burn DCKSLAP and eventually obtain GBOF
+         *
+         * Input parameters:
+         * - dckuserbadge_proof: a proof of ownership of a DckUserBadge
+         * - dckslap_bucket: a bucket containing at least one DCKSLAP
+         *
+         * Outputs:
+         * - a bucket of GBOF or None
+         *
+         * Events:
+         * - eventually a DckslapGbofSwapEvent event
+         */
+        pub fn burn(
+            &mut self,
+            dckuserbadge_proof: Proof,
+            dckslap_bucket: Bucket,
+        ) -> Option<FungibleBucket> {
+            assert!(
+                dckslap_bucket.resource_address() == self.dckslap_resource_manager.address(),
+                "Wrong coin"
+            );
+            assert!(
+                dckslap_bucket.amount() >= dec![1],
+                "Not enough DCKSLAP"
+            );
+
+            let non_fungible = dckuserbadge_proof.check_with_message(
+                self.dckuserbadge_resource_manager.address(),
+                "Incorrect proof",
+            )
+                .as_non_fungible()
+                .non_fungible::<DckUserBadge>();
+            let mut non_fungible_data = non_fungible.data();
+
+            dckslap_bucket.burn();
+            non_fungible_data.burned_dckslap += 1;
+
+            let gbof_bucket = match non_fungible_data.burned_dckslap >= self.dckslap_per_gbof {
+                true => {
+                    non_fungible_data.burned_dckslap = 0;
+
+                    let id = match &non_fungible.local_id() {
+                        NonFungibleLocalId::Integer(local_id) => local_id.value(),
+                        _ => Runtime::panic("Should not happen".to_string()),
+                    };
+                    let account = self.accounts.get(&id).unwrap();
+
+                    Runtime::emit_event(
+                        DckslapGbofSwapEvent {
+                            account: *account,
+                        }
+                    );
+
+                    Some(self.gbof_resource_manager.mint(dec![1]))
+                },
+                false => None,
+            };
+
+            self.dckuserbadge_resource_manager.update_non_fungible_data(
+                &non_fungible.local_id(),
+                "burned_dckslap",
+                non_fungible_data.burned_dckslap
+            );
+
+            gbof_bucket
         }
 
         /* Mint DCKSLAP and GBOF

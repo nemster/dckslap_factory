@@ -15,7 +15,7 @@ Use this function to instatiate a new DckslapFactory component and mint an initi
 
 ```
 CALL_FUNCTION
-    Address("<BLUEPRINT_ADDRESS>")
+    Address("<PACKAGE_ADDRESS>")
     "DckslapFactory"
     "new"
     Address("<ADMIN_BADGE_ADDRESS>")
@@ -28,6 +28,7 @@ CALL_FUNCTION
     <GBOF_FIRST_CLAIM>u32
     <GBOF_CLAIM_INCREASE>u32
     <GBOF_CLAIM_INCREASE_INCREASE>u32
+    <DCKSLAP_PER_GBOF>u32
 ;
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -36,7 +37,7 @@ CALL_METHOD
 ;
 ```
 
-`<BLUEPRINT_ADDRESS>`: the address of the `DckslapFactory` blueprint.  
+`<PACKAGE_ADDRESS>`: the address of the package containing the `DckslapFactory` blueprint.  
 `<ADMIN_BADGE_ADDRESS>`: this resource address will be the owner of the component and the resources.  
 `<BOT_BADGE_ADDRESS>`: a proof of this resource address will be needed to call the `mint_dckuserbadge` method.  
 `<DCKSLAP_INITIAL_SUPPLY>`: the initial supply of `DCKSLAP` that will be returned by this function.  
@@ -47,6 +48,7 @@ CALL_METHOD
 `<GBOF_FIRST_CLAIM>`: how many successful `DCKSLAP` claims are needed for the first GBOF distribution.  
 `<GBOF_CLAIM_INCREASE>`: fixed increase in claims for the next `GBOF` distribution.  
 `<GBOF_CLAIM_INCREASE_INCREASE>`: variable increase in claims for the next `GBOF` distribution (this is multiplied by the number of distributions and summed to the fixed increase).  
+`<DCKSLAP_PER_GBOF>`: the number of `DCKSLAP` a user can burn to get a `GBOF`
 `<ACCOUNT_ADDRESS>`: the account to deposit the initial supply in.  
 
 ## `mint_dckuserbadge`
@@ -116,6 +118,50 @@ This method fails if less than `claim_interval` seconds has passed since the las
 
 Upon success the `claim` method emits a `DckslapClaimEvent` event specifying the account address and the number of claims from this account.  
 If `GBOFs` are returned too, this method will emit a `GbofClaimEvent` event too specifying the account address and the number of times this account has received `GBOFs`.  
+
+## `burn`
+A user can invoke this method to burn a `DCKSLAP` and eventually obtain a `GBOF`
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<DCKSLAP_ADDRESS>")
+    Decimal("1")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<DCKSLAP_ADDRESS>")
+    Bucket("dckslap")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<DCKUSERBADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<DCKUSERBADGE_ID>#"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("dckuserbadge_proof")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    Proof("dckuserbadge_proof")
+    Bucket("dckslap")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>`: address of the user account.  
+`<DCKSLAP_ADDRESS>`: resource address of `DCKSLAP` coins.  
+`<DCKUSERBADGE_ADDRESS>`: resource address of the `Dck User Badge`.  
+`<DCKUSERBADGE_ID>`: numeric id of the `Dck User Badge` in the user's account.  
+`<COMPONENT_ADDRESS>`: the component created by the `new` function.  
+
+A `GBOF` is returned when the user has burned `<DCKSLAP_PER_GBOF>` `DCKSLAP`; in this case a `DckslapGbofSwapEvent` event is emitted. The event contains user's account address.  
+If the user burns multiple `DCKSLAP` in a single operation those will be counted as just one; so he really needs to invoke this method `<DCKSLAP_PER_GBOF>` times.  
 
 ## `mint`
 The admin can invoke this method to mint new `DCKSLAP` and/or `GBOF`.  
