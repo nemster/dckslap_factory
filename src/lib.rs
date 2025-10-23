@@ -8,7 +8,7 @@ struct DckUserBadge {
     #[mutable]
     pub last_claim_time: Instant,
     #[mutable]
-    pub claims: u64,
+    pub claims: u32,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -20,13 +20,13 @@ struct DckUserBadgeMintEvent {
 #[derive(ScryptoSbor, ScryptoEvent)]
 struct DckslapClaimEvent {
     account: Global<Account>,
-    claims_from_account: u64,
+    claims_from_account: u32,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
 struct GbofClaimEvent {
     account: Global<Account>,
-    claims_from_account: u64,
+    claims_from_account: u32,
 }
 
 #[blueprint]
@@ -59,9 +59,9 @@ mod dckslap_factory {
         dckslap_per_claim: Decimal,
         claim_interval: i64,
         gbof_per_claim: Decimal,
-        gbof_first_claim: u64,
-        gbof_claim_increase: u64,
-        gbof_claim_increase_increase: u64,
+        gbof_first_claim: u32,
+        gbof_claim_increase: u32,
+        gbof_claim_increase_increase: u32,
         next_dckuserbadge_id: u64,
         accounts: KeyValueStore<u64, Global<Account>>,
     }
@@ -102,9 +102,9 @@ mod dckslap_factory {
             dckslap_per_claim: Decimal,
             claim_interval: i64,
             gbof_per_claim: Decimal,
-            gbof_first_claim: u64,
-            gbof_claim_increase: u64,
-            gbof_claim_increase_increase: u64,
+            gbof_first_claim: u32,
+            gbof_claim_increase: u32,
+            gbof_claim_increase_increase: u32,
         ) -> (
             Global<DckslapFactory>,
             FungibleBucket,
@@ -267,7 +267,7 @@ mod dckslap_factory {
                         key_image_url: key_image_url.clone(),
                         has_dicks: true,
                         last_claim_time: never,
-                        claims: 0u64,
+                        claims: 0u32,
                     }
                 );
 
@@ -373,7 +373,7 @@ mod dckslap_factory {
                 }
             );
 
-            let mut n = 1u64;
+            let mut n = 1u32;
             let mut next_gbof_claim = self.gbof_first_claim;
             while claims > next_gbof_claim {
                 next_gbof_claim += self.gbof_claim_increase + n * self.gbof_claim_increase_increase;
