@@ -215,6 +215,7 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>`: the component created by the `new` function.  
 
 A `DckslapClaimEvent` event is emitted. The event contains user's account address and the number of times this account has received `DCKSLAPs`.  
+This method eventually returns `GBOF` too and emits a `GbofClaimEvent` event.  
 
 ## `mint`
 The admin can invoke this method to mint new `DCKSLAP` and/or `GBOF`.  
