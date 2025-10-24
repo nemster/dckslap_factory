@@ -513,6 +513,7 @@ mod spank_bank {
          *
          * Outputs:
          * - a bucket of GBOF or None
+         * - a bucket containing eventual excess DCKSLAP
          *
          * Events:
          * - eventually a GbofClaimEvent event
@@ -520,22 +521,19 @@ mod spank_bank {
         pub fn burn(
             &mut self,
             dckuserbadge_proof: Proof,
-            dckslap_bucket: Bucket,
-        ) -> Option<FungibleBucket> {
+            mut dckslap_bucket: FungibleBucket,
+        ) -> (Option<FungibleBucket>, FungibleBucket) {
             self.pay_fees(dec![1]);
 
             assert!(
                 dckslap_bucket.resource_address() == self.dckslap_resource_manager.address(),
                 "Wrong coin"
             );
-            assert!(
-                dckslap_bucket.amount() >= dec![1],
-                "Not enough DCKSLAP"
-            );
 
             let (_, _, id, mut user) = self.check_user_badge(dckuserbadge_proof);
 
-            dckslap_bucket.burn();
+            dckslap_bucket.take(1).burn();
+
             user.burned_dckslap += 1;
 
             let gbof_bucket = match user.burned_dckslap >= self.dckslap_per_gbof {
@@ -557,7 +555,10 @@ mod spank_bank {
 
             self.users.insert(id, user);
 
-            gbof_bucket
+            (
+                gbof_bucket,
+                dckslap_bucket,
+            )
         }
 
         /* Claim DCKSLAP paying with REDDICKS
