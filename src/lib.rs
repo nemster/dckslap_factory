@@ -485,7 +485,7 @@ mod spank_bank {
             FungibleBucket,
             Option<FungibleBucket>,
         ) {
-            self.pay_fees(dec![2]);
+            self.pay_fees(dec![1]);
 
             let (non_fungible_data, local_id, id, user) = self.check_user_badge(dckuserbadge_proof);
 
@@ -580,7 +580,7 @@ mod spank_bank {
             dckuserbadge_proof: Proof,
             mut reddicks_bucket: FungibleBucket,
         ) -> (FungibleBucket, Option<FungibleBucket>, FungibleBucket) {
-            self.pay_fees(dec![2]);
+            self.pay_fees(dec![1]);
 
             let (_, _, id, user) = self.check_user_badge(dckuserbadge_proof);
 
