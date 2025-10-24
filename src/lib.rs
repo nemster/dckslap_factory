@@ -62,6 +62,7 @@ mod spank_bank {
             mint => restrict_to: [OWNER];
             withdraw_reddicks => restrict_to: [OWNER];
             deposit_xrd => PUBLIC;
+            update_settings => restrict_to: [OWNER];
         }
     }
 
@@ -628,6 +629,44 @@ mod spank_bank {
             xrd_bucket: FungibleBucket,
         ) {
             self.xrd_vault.put(xrd_bucket);
+        }
+
+        /* Update component settings
+         *
+         * You need the admin badge to invoke this method
+         *
+         * Input parameters:
+         * - dckslap_per_claim: how many DCKSLAP distribute at each successful claim
+         * - claim_interval: interval in seconds between claims from the same account
+         * - gbof_per_claim: how many GBOF distribute at each distribution
+         * - gbof_first_claim: how many successful DCKSLAP claims are needed for the first GBOF
+         * distribution
+         * - gbof_claim_increase: fixed increase in claims for the next GBOF distribution
+         * - gbof_claim_increase_increase: variable increase in claims for the next GBOF
+         * distribution (this is multiplied by the number of distributions and summed to the
+         * fixed increase)
+         * - dckslap_per_gbof: how many DCKSLAP can be burned to get a GBOF
+         * - reddicks_per_claim: how many REDDICKS a user has to pay for an additional claim
+         */
+        pub fn update_settings(
+            &mut self,
+            dckslap_per_claim: Decimal,
+            claim_interval: i64,
+            gbof_per_claim: Decimal,
+            gbof_first_claim: u32,
+            gbof_claim_increase: u32,
+            gbof_claim_increase_increase: u32,
+            dckslap_per_gbof: u32,
+            reddicks_per_claim: u32,
+        ) {
+            self.dckslap_per_claim = dckslap_per_claim;
+            self.claim_interval = claim_interval;
+            self.gbof_per_claim = gbof_per_claim;
+            self.gbof_first_claim = gbof_first_claim;
+            self.gbof_claim_increase = gbof_claim_increase;
+            self.gbof_claim_increase_increase = gbof_claim_increase_increase;
+            self.dckslap_per_gbof = dckslap_per_gbof;
+            self.reddicks_per_claim = reddicks_per_claim;
         }
     }
 }

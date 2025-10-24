@@ -297,3 +297,36 @@ CALL_METHOD
 `<XRD_AMOUNT>`: amount of XRD to deposit in the component.  
 `<COMPONENT_ADDRESS>`: the component created by the `new` function.  
 
+## `update_settings`
+Use this function to instatiate a new SpankBank component and mint an initial supply of both `DCKSLAP` and `GBOF`.  
+    
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<ADMIN_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "update_settings"
+    Decimal("<DCKSLAP_PER_CLAIM>")
+    <CLAIM_INTERVAL>i64
+    Decimal("<GBOF_PER_CLAIM>")
+    <GBOF_FIRST_CLAIM>u32
+    <GBOF_CLAIM_INCREASE>u32
+    <GBOF_CLAIM_INCREASE_INCREASE>u32
+    <DCKSLAP_PER_GBOF>u32
+    <REDDICKS_PER_CLAIM>u32
+;   
+``` 
+
+`<DCKSLAP_PER_CLAIM>`: how many `DCKSLAP` distribute at each successful claim.  
+`<CLAIM_INTERVAL>`: interval in seconds between claims from the same account.  
+`<GBOF_PER_CLAIM>`: how many `GBOF` distribute at each distribution.  
+`<GBOF_FIRST_CLAIM>`: how many successful `DCKSLAP` claims are needed for the first GBOF distribution.  
+`<GBOF_CLAIM_INCREASE>`: fixed increase in claims for the next `GBOF` distribution.  
+`<GBOF_CLAIM_INCREASE_INCREASE>`: variable increase in claims for the next `GBOF` distribution (this is multiplied by the number of distributions and summed to the fixed increase).  
+`<DCKSLAP_PER_GBOF>`: the number of `DCKSLAP` a user can burn to get a `GBOF`  
+`<REDDICKS_PER_CLAIM>`: how many `REDDICKS` a user has to pay for an additional claim.  
+
