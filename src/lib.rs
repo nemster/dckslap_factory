@@ -1,4 +1,5 @@
 use scrypto::prelude::*;
+use std::ops::Deref;
 
 #[derive(ScryptoSbor, NonFungibleData)]
 struct DckUserBadge {
@@ -249,6 +250,40 @@ mod dckslap_factory {
             )
         }
 
+        fn check_user_badge(
+            &self,
+            dckuserbadge_proof: Proof,
+        ) -> (DckUserBadge, NonFungibleLocalId, Global<Account>) {
+             let non_fungible = dckuserbadge_proof.check_with_message(
+                self.dckuserbadge_resource_manager.address(),
+                "Incorrect proof",
+            )
+                .as_non_fungible()
+                .non_fungible::<DckUserBadge>();
+
+            let non_fungible_data = non_fungible.data();
+
+            assert!(
+                non_fungible_data.has_dicks,
+                "You have no dick"
+            );
+
+            let local_id = non_fungible.local_id().clone();
+
+            let id = match &local_id {
+                NonFungibleLocalId::Integer(local_id) => local_id.value(),
+                _ => Runtime::panic("Should not happen".to_string()),
+            };
+
+            let account = self.accounts.get(&id).unwrap();
+
+            (
+                non_fungible_data,
+                local_id,
+                *account.deref(),
+            )
+        }
+
         /* Mints one or more DckUserBadges and sends them to the specified accounts
          *
          * You need the bot badge to invoke this method
@@ -338,19 +373,7 @@ mod dckslap_factory {
             FungibleBucket,
             Option<FungibleBucket>,
         ) {
-            let non_fungible = dckuserbadge_proof.check_with_message(
-                self.dckuserbadge_resource_manager.address(),
-                "Incorrect proof",
-            )
-                .as_non_fungible()
-                .non_fungible::<DckUserBadge>();
-
-            let non_fungible_data = non_fungible.data();
-
-            assert!(
-                non_fungible_data.has_dicks,
-                "You have no dick"
-            );
+            let (non_fungible_data, local_id, account) = self.check_user_badge(dckuserbadge_proof);
 
             let now = Clock::current_time_rounded_to_seconds();
             assert!(
@@ -360,29 +383,23 @@ mod dckslap_factory {
             );
 
             self.dckuserbadge_resource_manager.update_non_fungible_data(
-                &non_fungible.local_id(),
+                &local_id,
                 "last_claim_time",
                 now
             );
 
             let claims = non_fungible_data.claims + 1;
             self.dckuserbadge_resource_manager.update_non_fungible_data(
-                &non_fungible.local_id(),
+                &local_id,
                 "claims",
                 claims
             );
 
             let dckslap_bucket = self.dckslap_resource_manager.mint(self.dckslap_per_claim);
 
-            let id = match &non_fungible.local_id() {
-                NonFungibleLocalId::Integer(local_id) => local_id.value(),
-                _ => Runtime::panic("Should not happen".to_string()),
-            };
-            let account = self.accounts.get(&id).unwrap();
-
             Runtime::emit_event(
                 DckslapClaimEvent {
-                    account: *account,
+                    account: account,
                     claims_from_account: claims,
                 }
             );
@@ -397,7 +414,7 @@ mod dckslap_factory {
                 true => {
                     Runtime::emit_event(
                         GbofClaimEvent {
-                            account: *account,
+                            account: account,
                             claims_from_account: n,
                         }
                     );
@@ -440,13 +457,7 @@ mod dckslap_factory {
                 "Not enough DCKSLAP"
             );
 
-            let non_fungible = dckuserbadge_proof.check_with_message(
-                self.dckuserbadge_resource_manager.address(),
-                "Incorrect proof",
-            )
-                .as_non_fungible()
-                .non_fungible::<DckUserBadge>();
-            let mut non_fungible_data = non_fungible.data();
+            let (mut non_fungible_data, local_id, account) = self.check_user_badge(dckuserbadge_proof);
 
             dckslap_bucket.burn();
             non_fungible_data.burned_dckslap += 1;
@@ -455,15 +466,9 @@ mod dckslap_factory {
                 true => {
                     non_fungible_data.burned_dckslap = 0;
 
-                    let id = match &non_fungible.local_id() {
-                        NonFungibleLocalId::Integer(local_id) => local_id.value(),
-                        _ => Runtime::panic("Should not happen".to_string()),
-                    };
-                    let account = self.accounts.get(&id).unwrap();
-
                     Runtime::emit_event(
                         DckslapGbofSwapEvent {
-                            account: *account,
+                            account: account,
                         }
                     );
 
@@ -473,7 +478,7 @@ mod dckslap_factory {
             };
 
             self.dckuserbadge_resource_manager.update_non_fungible_data(
-                &non_fungible.local_id(),
+                &local_id,
                 "burned_dckslap",
                 non_fungible_data.burned_dckslap
             );
