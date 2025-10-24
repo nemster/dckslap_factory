@@ -267,3 +267,33 @@ CALL_METHOD
 ;
 ```
 
+`<ACCOUNT_ADDRESS>`: address of the admin account.  
+`<ADMIN_BADGE_ADDRESS>`: resource address of the admin badge.  
+`<COMPONENT_ADDRESS>`: the component created by the `new` function.  
+
+## `deposit_xrd`
+Use this method to deposit XRD to pay future users' transactions
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<XRD_ADDRESS>")
+    Decimal("<XRD_AMOUNT>")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<XRD_ADDRESS>")
+    Bucket("xrd")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "deposit_xrd"
+    Bucket("xrd")
+;
+```
+
+`<ACCOUNT_ADDRESS>`: address of the admin account.  
+`<XRD_ADDRESS>`: XRD resource address.  
+`<XRD_AMOUNT>`: amount of XRD to deposit in the component.  
+`<COMPONENT_ADDRESS>`: the component created by the `new` function.  
+

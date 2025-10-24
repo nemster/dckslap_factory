@@ -61,6 +61,7 @@ mod spank_bank {
             pay_claim => PUBLIC;
             mint => restrict_to: [OWNER];
             withdraw_reddicks => restrict_to: [OWNER];
+            deposit_xrd => PUBLIC;
         }
     }
 
@@ -79,6 +80,7 @@ mod spank_bank {
         reddicks_per_claim: u32,
         next_dckuserbadge_id: u64,
         users: KeyValueStore<u64, User>,
+        xrd_vault: FungibleVault,
     }
 
     impl SpankBank {
@@ -243,6 +245,7 @@ mod spank_bank {
                 reddicks_per_claim: reddicks_per_claim,
                 next_dckuserbadge_id: 1u64,
                 users: KeyValueStore::new_with_registered_type(),
+                xrd_vault: FungibleVault::new(XRD),
             }
                 .instantiate()
                 .prepare_to_globalize(OwnerRole::Updatable(rule!(require(admin_badge_address))))
@@ -312,6 +315,20 @@ mod spank_bank {
             )
         }
 
+        /* Internal function to pay the fees of the curent transaction
+         *
+         * Input parameters:
+         * - amount: the maximum amount of XRD to pay
+         */
+        fn pay_fees(
+            &mut self,
+            amount: Decimal,
+        ) {
+            if self.xrd_vault.amount() >= amount {
+                self.xrd_vault.lock_contingent_fee(amount);
+            }
+        }
+
         /* Mints one or more DckUserBadges and sends them to the specified accounts
          *
          * You need the bot badge to invoke this method
@@ -330,6 +347,8 @@ mod spank_bank {
             key_image_url: Url,
             mut recipients: Vec<Global<Account>>,
         ) {
+            self.pay_fees(dec![10]);
+
             let never = Instant::new(0i64);
 
             let mut dckuserbadge_sent = 0u64;
@@ -406,6 +425,8 @@ mod spank_bank {
             FungibleBucket,
             Option<FungibleBucket>,
         ) {
+            self.pay_fees(dec![2]);
+
             let (non_fungible_data, local_id, id, mut user) = self.check_user_badge(dckuserbadge_proof);
 
             let now = Clock::current_time_rounded_to_seconds();
@@ -422,12 +443,6 @@ mod spank_bank {
             );
 
             user.free_claims += 1;
-
-            self.dckuserbadge_resource_manager.update_non_fungible_data(
-                &local_id,
-                "claims",
-                user.free_claims + user.paid_claims,
-            );
 
             let dckslap_bucket = self.dckslap_resource_manager.mint(self.dckslap_per_claim);
 
@@ -486,6 +501,8 @@ mod spank_bank {
             dckuserbadge_proof: Proof,
             dckslap_bucket: Bucket,
         ) -> Option<FungibleBucket> {
+            self.pay_fees(dec![1]);
+
             assert!(
                 dckslap_bucket.resource_address() == self.dckslap_resource_manager.address(),
                 "Wrong coin"
@@ -540,6 +557,8 @@ mod spank_bank {
             dckuserbadge_proof: Proof,
             mut reddicks_bucket: FungibleBucket,
         ) -> (FungibleBucket, FungibleBucket) {
+            self.pay_fees(dec![1]);
+
             let (_, _, id, mut user) = self.check_user_badge(dckuserbadge_proof);
 
             self.reddicks_vault.put(
@@ -597,6 +616,18 @@ mod spank_bank {
          */
         pub fn withdraw_reddicks(&mut self) -> FungibleBucket {
             self.reddicks_vault.take_all()
+        }
+
+        /* Deposit XRDs to pay users' transactions
+         *
+         * Input parameters:
+         * - xrd_bucket: a bucket of XRD
+         */
+        pub fn deposit_xrd(
+            &mut self,
+            xrd_bucket: FungibleBucket,
+        ) {
+            self.xrd_vault.put(xrd_bucket);
         }
     }
 }
