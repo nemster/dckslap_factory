@@ -31,8 +31,7 @@ struct GbofClaimEvent {
 #[derive(ScryptoSbor, Clone)]
 struct User {
     account: Global<Account>,
-    free_claims: u32,
-    paid_claims: u32,
+    claims: u32,
     burned_dckslap: u32,
     gbof_free_claims: u32,
     gbof_paid_claims: u32,
@@ -264,7 +263,7 @@ mod spank_bank {
             )
         }
 
-        /* Internal function to check a user badge proof and return all of the informations
+        /* Internal method to check a user badge proof and return all of the informations
          * associated with the user
          *
          * Input parameters:
@@ -316,7 +315,7 @@ mod spank_bank {
             )
         }
 
-        /* Internal function to pay the fees of the curent transaction
+        /* Internal method to pay the fees of the curent transaction
          *
          * Input parameters:
          * - amount: the maximum amount of XRD to pay
@@ -328,6 +327,67 @@ mod spank_bank {
             if self.xrd_vault.amount() >= amount {
                 self.xrd_vault.lock_contingent_fee(amount);
             }
+        }
+
+        /* Internal method to handle both free and paid claims
+         *
+         * Input parameters:
+         * - id: numeric identifier of user's badge
+         * - user: details about the user claiming
+         *
+         * Outputs:
+         * - a bucket of DCKSLAP
+         * - a bucket of GBOF or None
+         *
+         * Events:
+         * - a DckslapClaimEvent
+         * - eventually a GbofClaimEvent
+         */
+        fn do_claim(
+            &mut self,
+            id: u64,
+            mut user: User,
+        ) -> (FungibleBucket, Option<FungibleBucket>) {
+            user.claims += 1;
+
+            let dckslap_bucket = self.dckslap_resource_manager.mint(self.dckslap_per_claim);
+
+            Runtime::emit_event(
+                DckslapClaimEvent {
+                    account: user.account,
+                    claims_from_account: user.claims,
+                }
+            );
+
+            let mut n = 1u32;
+            let mut next_gbof_claim = self.gbof_first_claim;
+            while user.claims > next_gbof_claim {
+                next_gbof_claim += self.gbof_claim_increase + n * self.gbof_claim_increase_increase;
+                n += 1;
+            }
+            let gbof_bucket = match user.claims == next_gbof_claim {
+                true => {
+                    user.gbof_free_claims = n;
+
+                    Runtime::emit_event(
+                        GbofClaimEvent {
+                            account: user.account,
+                            claims_from_account: n + user.gbof_paid_claims,
+                        }
+                    );
+
+                    Some(self.gbof_resource_manager.mint(self.gbof_per_claim))
+                },
+
+                false => None,
+            };
+
+            self.users.insert(id, user);
+
+            (
+                dckslap_bucket,
+                gbof_bucket,
+            )
         }
 
         /* Mints one or more DckUserBadges and sends them to the specified accounts
@@ -387,8 +447,7 @@ mod spank_bank {
                             id,
                             User {
                                 account: *account,
-                                free_claims: 0u32,
-                                paid_claims: 0u32,
+                                claims: 0u32,
                                 burned_dckslap: 0u32,
                                 gbof_free_claims: 0u32,
                                 gbof_paid_claims: 0u32,
@@ -428,7 +487,7 @@ mod spank_bank {
         ) {
             self.pay_fees(dec![2]);
 
-            let (non_fungible_data, local_id, id, mut user) = self.check_user_badge(dckuserbadge_proof);
+            let (non_fungible_data, local_id, id, user) = self.check_user_badge(dckuserbadge_proof);
 
             let now = Clock::current_time_rounded_to_seconds();
             assert!(
@@ -443,46 +502,7 @@ mod spank_bank {
                 now
             );
 
-            user.free_claims += 1;
-
-            let dckslap_bucket = self.dckslap_resource_manager.mint(self.dckslap_per_claim);
-
-            Runtime::emit_event(
-                DckslapClaimEvent {
-                    account: user.account,
-                    claims_from_account: user.free_claims + user.paid_claims,
-                }
-            );
-
-            let mut n = 1u32;
-            let mut next_gbof_claim = self.gbof_first_claim;
-            while user.free_claims > next_gbof_claim {
-                next_gbof_claim += self.gbof_claim_increase + n * self.gbof_claim_increase_increase;
-                n += 1;
-            }
-            let gbof_bucket = match user.free_claims == next_gbof_claim {
-                true => {
-                    user.gbof_free_claims = n;
-
-                    Runtime::emit_event(
-                        GbofClaimEvent {
-                            account: user.account,
-                            claims_from_account: n + user.gbof_paid_claims,
-                        }
-                    );
-
-                    Some(self.gbof_resource_manager.mint(self.gbof_per_claim))
-                },
-
-                false => None,
-            };
-
-            self.users.insert(id, user);
-
-            (
-                dckslap_bucket,
-                gbof_bucket,
-            )
+            self.do_claim(id, user)
         }
 
         /* Burn DCKSLAP and eventually obtain GBOF
@@ -548,6 +568,7 @@ mod spank_bank {
          *
          * Outputs:
          * - a bucket of DCKSLAP
+         * - a bucket of GBOF or None
          * - a bucket of eventual excess REDDICKS
          *
          * Events:
@@ -557,10 +578,10 @@ mod spank_bank {
             &mut self,
             dckuserbadge_proof: Proof,
             mut reddicks_bucket: FungibleBucket,
-        ) -> (FungibleBucket, FungibleBucket) {
-            self.pay_fees(dec![1]);
+        ) -> (FungibleBucket, Option<FungibleBucket>, FungibleBucket) {
+            self.pay_fees(dec![2]);
 
-            let (_, _, id, mut user) = self.check_user_badge(dckuserbadge_proof);
+            let (_, _, id, user) = self.check_user_badge(dckuserbadge_proof);
 
             self.reddicks_vault.put(
                 reddicks_bucket.take(
@@ -568,19 +589,11 @@ mod spank_bank {
                 )
             );
 
-            user.paid_claims += 1;
+            let (dckslap_bucket, gbof_bucket) = self.do_claim(id, user);
 
-            Runtime::emit_event(
-                DckslapClaimEvent {
-                    account: user.account,
-                    claims_from_account: user.free_claims + user.paid_claims,
-                }
-            );
-
-            self.users.insert(id, user);
-            
             (
-                self.dckslap_resource_manager.mint(self.dckslap_per_claim),
+                dckslap_bucket,
+                gbof_bucket,
                 reddicks_bucket,
             )
         }

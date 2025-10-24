@@ -11,7 +11,6 @@ Offchain script are needed to tell the component who to send the `Dck User Badge
 The same `bot badge` is needed to update `Dck User Bagde` non fungible data and invoke the `mint_dckuserbadge` method.  
 
 A user can also pay with `REDDICKS` for an additonal `DCKSLAP` claim; the parameter `<REDDICKS_PER_CLAIM>` is the price to pay.  
-Paid claims do not interfere with the time limited claims.  
 
 It is also possible to burn `DCKSLAP` (one at a time); when the user has burned enough `DCKSLAP` (`dckslap_per_gbof` parameter) a `GBOF` claim happens.  
 
