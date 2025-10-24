@@ -1,17 +1,13 @@
 use scrypto::prelude::*;
-use std::ops::Deref;
 
 #[derive(ScryptoSbor, NonFungibleData)]
 struct DckUserBadge {
+    #[mutable]
     pub key_image_url: Url,
     #[mutable]
     pub has_dicks: bool,
     #[mutable]
     pub last_claim_time: Instant,
-    #[mutable]
-    pub claims: u32,
-    #[mutable]
-    pub burned_dckslap: u32,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -32,9 +28,14 @@ struct GbofClaimEvent {
     claims_from_account: u32,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
-struct DckslapGbofSwapEvent {
+#[derive(ScryptoSbor, Clone)]
+struct User {
     account: Global<Account>,
+    free_claims: u32,
+    paid_claims: u32,
+    burned_dckslap: u32,
+    gbof_free_claims: u32,
+    gbof_paid_claims: u32,
 }
 
 #[blueprint]
@@ -42,11 +43,10 @@ struct DckslapGbofSwapEvent {
     DckUserBadgeMintEvent,
     DckslapClaimEvent,
     GbofClaimEvent,
-    DckslapGbofSwapEvent,
 )]
 #[types(
     u64,
-    Global<Account>,
+    User,
 )]
 mod dckslap_factory {
 
@@ -58,7 +58,9 @@ mod dckslap_factory {
             mint_dckuserbadge => restrict_to: [bot];
             claim => PUBLIC;
             burn => PUBLIC;
+            pay_claim => PUBLIC;
             mint => restrict_to: [OWNER];
+            withdraw_reddicks => restrict_to: [OWNER];
         }
     }
 
@@ -73,8 +75,10 @@ mod dckslap_factory {
         gbof_claim_increase: u32,
         gbof_claim_increase_increase: u32,
         dckslap_per_gbof: u32,
+        reddicks_vault: FungibleVault,
+        reddicks_per_claim: u32,
         next_dckuserbadge_id: u64,
-        accounts: KeyValueStore<u64, Global<Account>>,
+        users: KeyValueStore<u64, User>,
     }
 
     impl DckslapFactory {
@@ -99,6 +103,8 @@ mod dckslap_factory {
          * distribution (this is multiplied by the number of distributions and summed to the
          * fixed increase)
          * - dckslap_per_gbof: how many DCKSLAP can be burned to get a GBOF
+         * - reddicks_address: the resource address of the REDDICKS coin
+         * - reddicks_per_claim: how many REDDICKS a user has to pay for an additional claim
          *
          * Outputs:
          * - the globalised DckslapFactory component
@@ -118,6 +124,8 @@ mod dckslap_factory {
             gbof_claim_increase: u32,
             gbof_claim_increase_increase: u32,
             dckslap_per_gbof: u32,
+            reddicks_address: ResourceAddress,
+            reddicks_per_claim: u32,
         ) -> (
             Global<DckslapFactory>,
             FungibleBucket,
@@ -231,8 +239,10 @@ mod dckslap_factory {
                 gbof_claim_increase: gbof_claim_increase,
                 gbof_claim_increase_increase: gbof_claim_increase_increase,
                 dckslap_per_gbof: dckslap_per_gbof,
+                reddicks_vault: FungibleVault::new(reddicks_address),
+                reddicks_per_claim: reddicks_per_claim,
                 next_dckuserbadge_id: 1u64,
-                accounts: KeyValueStore::new_with_registered_type(),
+                users: KeyValueStore::new_with_registered_type(),
             }
                 .instantiate()
                 .prepare_to_globalize(OwnerRole::Updatable(rule!(require(admin_badge_address))))
@@ -250,10 +260,27 @@ mod dckslap_factory {
             )
         }
 
+        /* Internal function to check a user badge proof and return all of the informations
+         * associated with the user
+         *
+         * Input parameters:
+         * - dckuserbadge_proof: a user badge proof
+         *
+         * Output parameters:
+         * - the NonFungibleData of the user badge
+         * - the NonFungibleLocalId of the user badge
+         * - the numeric id extracted from the NonFungibleLocalId
+         * - internal information about the user stored in the users KVS
+         */
         fn check_user_badge(
             &self,
             dckuserbadge_proof: Proof,
-        ) -> (DckUserBadge, NonFungibleLocalId, Global<Account>) {
+        ) -> (
+            DckUserBadge,
+            NonFungibleLocalId,
+            u64,
+            User
+        ) {
              let non_fungible = dckuserbadge_proof.check_with_message(
                 self.dckuserbadge_resource_manager.address(),
                 "Incorrect proof",
@@ -275,12 +302,13 @@ mod dckslap_factory {
                 _ => Runtime::panic("Should not happen".to_string()),
             };
 
-            let account = self.accounts.get(&id).unwrap();
+            let user = self.users.get(&id).unwrap();
 
             (
                 non_fungible_data,
                 local_id,
-                *account.deref(),
+                id,
+                user.clone(),
             )
         }
 
@@ -315,8 +343,6 @@ mod dckslap_factory {
                         key_image_url: key_image_url.clone(),
                         has_dicks: true,
                         last_claim_time: never,
-                        claims: 0u32,
-                        burned_dckslap: 0u32,
                     }
                 );
 
@@ -337,9 +363,16 @@ mod dckslap_factory {
 
                         dckuserbadge_sent += 1u64;
 
-                        self.accounts.insert(
+                        self.users.insert(
                             id,
-                            *account
+                            User {
+                                account: *account,
+                                free_claims: 0u32,
+                                paid_claims: 0u32,
+                                burned_dckslap: 0u32,
+                                gbof_free_claims: 0u32,
+                                gbof_paid_claims: 0u32,
+                            }
                         );
                     }
                 }
@@ -373,7 +406,7 @@ mod dckslap_factory {
             FungibleBucket,
             Option<FungibleBucket>,
         ) {
-            let (non_fungible_data, local_id, account) = self.check_user_badge(dckuserbadge_proof);
+            let (non_fungible_data, local_id, id, mut user) = self.check_user_badge(dckuserbadge_proof);
 
             let now = Clock::current_time_rounded_to_seconds();
             assert!(
@@ -388,34 +421,37 @@ mod dckslap_factory {
                 now
             );
 
-            let claims = non_fungible_data.claims + 1;
+            user.free_claims += 1;
+
             self.dckuserbadge_resource_manager.update_non_fungible_data(
                 &local_id,
                 "claims",
-                claims
+                user.free_claims + user.paid_claims,
             );
 
             let dckslap_bucket = self.dckslap_resource_manager.mint(self.dckslap_per_claim);
 
             Runtime::emit_event(
                 DckslapClaimEvent {
-                    account: account,
-                    claims_from_account: claims,
+                    account: user.account,
+                    claims_from_account: user.free_claims + user.paid_claims,
                 }
             );
 
             let mut n = 1u32;
             let mut next_gbof_claim = self.gbof_first_claim;
-            while claims > next_gbof_claim {
+            while user.free_claims > next_gbof_claim {
                 next_gbof_claim += self.gbof_claim_increase + n * self.gbof_claim_increase_increase;
                 n += 1;
             }
-            let gbof_bucket = match claims == next_gbof_claim {
+            let gbof_bucket = match user.free_claims == next_gbof_claim {
                 true => {
+                    user.gbof_free_claims = n;
+
                     Runtime::emit_event(
                         GbofClaimEvent {
-                            account: account,
-                            claims_from_account: n,
+                            account: user.account,
+                            claims_from_account: n + user.gbof_paid_claims,
                         }
                     );
 
@@ -424,6 +460,8 @@ mod dckslap_factory {
 
                 false => None,
             };
+
+            self.users.insert(id, user);
 
             (
                 dckslap_bucket,
@@ -441,7 +479,7 @@ mod dckslap_factory {
          * - a bucket of GBOF or None
          *
          * Events:
-         * - eventually a DckslapGbofSwapEvent event
+         * - eventually a GbofClaimEvent event
          */
         pub fn burn(
             &mut self,
@@ -457,18 +495,20 @@ mod dckslap_factory {
                 "Not enough DCKSLAP"
             );
 
-            let (mut non_fungible_data, local_id, account) = self.check_user_badge(dckuserbadge_proof);
+            let (_, _, id, mut user) = self.check_user_badge(dckuserbadge_proof);
 
             dckslap_bucket.burn();
-            non_fungible_data.burned_dckslap += 1;
+            user.burned_dckslap += 1;
 
-            let gbof_bucket = match non_fungible_data.burned_dckslap >= self.dckslap_per_gbof {
+            let gbof_bucket = match user.burned_dckslap >= self.dckslap_per_gbof {
                 true => {
-                    non_fungible_data.burned_dckslap = 0;
+                    user.burned_dckslap = 0;
+                    user.gbof_paid_claims += 1;
 
                     Runtime::emit_event(
-                        DckslapGbofSwapEvent {
-                            account: account,
+                        GbofClaimEvent {
+                            account: user.account,
+                            claims_from_account: user.gbof_free_claims + user.gbof_paid_claims,
                         }
                     );
 
@@ -477,13 +517,52 @@ mod dckslap_factory {
                 false => None,
             };
 
-            self.dckuserbadge_resource_manager.update_non_fungible_data(
-                &local_id,
-                "burned_dckslap",
-                non_fungible_data.burned_dckslap
-            );
+            self.users.insert(id, user);
 
             gbof_bucket
+        }
+
+        /* Claim DCKSLAP paying with REDDICKS
+         *
+         * Input parameters:
+         * - dckuserbadge_proof: a proof of ownership of a DckUserBadge
+         * - reddicks_bucket: a bucket of REDDICKS
+         *
+         * Outputs:
+         * - a bucket of DCKSLAP
+         * - a bucket of eventual excess REDDICKS
+         *
+         * Events:
+         * - a DckslapClaimEvent
+         */
+        pub fn pay_claim(
+            &mut self,
+            dckuserbadge_proof: Proof,
+            mut reddicks_bucket: FungibleBucket,
+        ) -> (FungibleBucket, FungibleBucket) {
+            let (_, _, id, mut user) = self.check_user_badge(dckuserbadge_proof);
+
+            self.reddicks_vault.put(
+                reddicks_bucket.take(
+                    self.reddicks_per_claim
+                )
+            );
+
+            user.paid_claims += 1;
+
+            Runtime::emit_event(
+                DckslapClaimEvent {
+                    account: user.account,
+                    claims_from_account: user.free_claims + user.paid_claims,
+                }
+            );
+
+            self.users.insert(id, user);
+            
+            (
+                self.dckslap_resource_manager.mint(self.dckslap_per_claim),
+                reddicks_bucket,
+            )
         }
 
         /* Mint DCKSLAP and GBOF
@@ -507,6 +586,17 @@ mod dckslap_factory {
                 self.dckslap_resource_manager.mint(dckslap_amount),
                 self.gbof_resource_manager.mint(gbof_amount)
             )
+        }
+
+        /* Withdraw REDDICKS paid by users
+         *
+         * You need the admin badge to invoke this method
+         *
+         * Outputs:
+         * - a bucket of REDDICKS
+         */
+        pub fn withdraw_reddicks(&mut self) -> FungibleBucket {
+            self.reddicks_vault.take_all()
         }
     }
 }
