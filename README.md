@@ -1,6 +1,6 @@
-# DCKSLAP Factory
+# Spank Bank
 
-DckslapFactory is a blueprint to manage the distribution of two fungibles (`DCKSLAP` and `GBOF`) and a non fungible (`Dck User Badge`) that is needed to keep track of users' claims.  
+SpankBank is a blueprint to manage the distribution of two fungibles (`DCKSLAP` and `GBOF`) and a non fungible (`Dck User Badge`) that is needed to keep track of users' claims.  
 `DCKSLAP` can be claimed periodically by the users who own the non fungible; the claim operation eventually returns some `GBOF` too.  
 The `claim_interval` set in the `new` method determines how often a user can do a claim.  
 
@@ -16,12 +16,12 @@ Paid claims do not interfere with the time limited claims.
 It is also possible to burn `DCKSLAP` (one at a time); when the user has burned enough `DCKSLAP` (`dckslap_per_gbof` parameter) a `GBOF` claim happens.  
 
 ## `new`
-Use this function to instatiate a new DckslapFactory component and mint an initial supply of both `DCKSLAP` and `GBOF`.  
+Use this function to instatiate a new SpankBank component and mint an initial supply of both `DCKSLAP` and `GBOF`.  
 
 ```
 CALL_FUNCTION
     Address("<PACKAGE_ADDRESS>")
-    "DckslapFactory"
+    "SpankBank"
     "new"
     Address("<ADMIN_BADGE_ADDRESS>")
     Address("<BOT_BADGE_ADDRESS>")
@@ -44,7 +44,7 @@ CALL_METHOD
 ;
 ```
 
-`<PACKAGE_ADDRESS>`: the address of the package containing the `DckslapFactory` blueprint.  
+`<PACKAGE_ADDRESS>`: the address of the package containing the `SpankBank` blueprint.  
 `<ADMIN_BADGE_ADDRESS>`: this resource address will be the owner of the component and the resources.  
 `<BOT_BADGE_ADDRESS>`: a proof of this resource address will be needed to call the `mint_dckuserbadge` method.  
 `<DCKSLAP_INITIAL_SUPPLY>`: the initial supply of `DCKSLAP` that will be returned by this function.  

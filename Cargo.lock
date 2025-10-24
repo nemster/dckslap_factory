@@ -338,14 +338,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dckslap_factory"
-version = "1.0.0"
-dependencies = [
- "scrypto",
- "scrypto-test",
-]
-
-[[package]]
 name = "der"
 version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1421,6 +1413,14 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+
+[[package]]
+name = "spank_bank"
+version = "1.0.0"
+dependencies = [
+ "scrypto",
+ "scrypto-test",
+]
 
 [[package]]
 name = "spin"

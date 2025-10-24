@@ -48,7 +48,7 @@ struct User {
     u64,
     User,
 )]
-mod dckslap_factory {
+mod spank_bank {
 
     enable_method_auth! {
         roles {
@@ -64,7 +64,7 @@ mod dckslap_factory {
         }
     }
 
-    struct DckslapFactory {
+    struct SpankBank {
         dckslap_resource_manager: FungibleResourceManager,
         gbof_resource_manager: FungibleResourceManager,
         dckuserbadge_resource_manager: NonFungibleResourceManager,
@@ -81,9 +81,9 @@ mod dckslap_factory {
         users: KeyValueStore<u64, User>,
     }
 
-    impl DckslapFactory {
+    impl SpankBank {
 
-        /* Instatiates a new DckslapFactory component.
+        /* Instatiates a new SpankBank component.
          *
          * Input parameters:
          * - admin_badge_address: this resource address will be the owner of the component and
@@ -107,7 +107,7 @@ mod dckslap_factory {
          * - reddicks_per_claim: how many REDDICKS a user has to pay for an additional claim
          *
          * Outputs:
-         * - the globalised DckslapFactory component
+         * - the globalised SpankBank component
          * - a bucket of DCKSLAP
          * - a bucket of Great Ball Of Fire
          * - the resource address of the DckUserBadges that will be minted by mint_dckuserbadge
@@ -127,13 +127,13 @@ mod dckslap_factory {
             reddicks_address: ResourceAddress,
             reddicks_per_claim: u32,
         ) -> (
-            Global<DckslapFactory>,
+            Global<SpankBank>,
             FungibleBucket,
             FungibleBucket,
             ResourceAddress,
         ) {
             let (address_reservation, component_address) =
-                Runtime::allocate_component_address(DckslapFactory::blueprint_id());
+                Runtime::allocate_component_address(SpankBank::blueprint_id());
 
             let dckslap_bucket = ResourceBuilder::new_fungible(
                 OwnerRole::Updatable(rule!(require(admin_badge_address)))
@@ -228,7 +228,7 @@ mod dckslap_factory {
                 ))
                 .create_with_no_initial_supply();
 
-            let dckslap_factory = Self {
+            let spank_bank = Self {
                 dckslap_resource_manager: dckslap_resource_manager,
                 gbof_resource_manager: gbof_resource_manager,
                 dckuserbadge_resource_manager: dckuserbadge_resource_manager,
@@ -253,7 +253,7 @@ mod dckslap_factory {
                 .globalize();
 
             (
-                dckslap_factory,
+                spank_bank,
                 dckslap_bucket,
                 gbof_bucket,
                 dckuserbadge_resource_manager.address(),
