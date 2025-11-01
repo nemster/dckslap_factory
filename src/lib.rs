@@ -11,12 +11,6 @@ struct DckUserBadge {
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
-struct DckUserBadgeMintEvent {
-    id: u64,
-    account: Global<Account>,
-}
-
-#[derive(ScryptoSbor, ScryptoEvent)]
 struct DckslapClaimEvent {
     account: Global<Account>,
     claims_from_account: u32,
@@ -39,7 +33,6 @@ struct User {
 
 #[blueprint]
 #[events(
-    DckUserBadgeMintEvent,
     DckslapClaimEvent,
     GbofClaimEvent,
 )]
@@ -54,7 +47,6 @@ mod spank_bank {
             bot => updatable_by: [OWNER];
         },
         methods {
-            mint_dckuserbadge => restrict_to: [bot];
             claim => PUBLIC;
             burn => PUBLIC;
             pay_claim => PUBLIC;
@@ -78,7 +70,6 @@ mod spank_bank {
         dckslap_per_gbof: u32,
         reddicks_vault: FungibleVault,
         reddicks_per_claim: u32,
-        next_dckuserbadge_id: u64,
         users: KeyValueStore<u64, User>,
         xrd_vault: FungibleVault,
     }
@@ -90,11 +81,9 @@ mod spank_bank {
          * Input parameters:
          * - admin_badge_address: this resource address will be the owner of the component and
          * the resources
-         * - bot_badge_address: a proof of this resource address will be needed to call the
-         * mint_dckuserbadge method
-         * - dckslap_initial_supply: the initial supply of DCKSLAP that will be returned by this
-         * function
-         * - gbof_initial_supply: the initial supply of GBOF that will be returned by this function
+         * - dckuserbadge_address: resource address of the Dck User Badge
+         * - dckslap_address: resource address of DCKSLAP
+         * - gbof_address: resource address of GBOF
          * - dckslap_per_claim: how many DCKSLAP distribute at each successful claim
          * - claim_interval: interval in seconds between claims from the same account
          * - gbof_per_claim: how many GBOF distribute at each distribution
@@ -116,9 +105,9 @@ mod spank_bank {
          */
         pub fn new(
             admin_badge_address: ResourceAddress,
-            bot_badge_address: ResourceAddress,
-            dckslap_initial_supply: Decimal,
-            gbof_initial_supply: Decimal,
+            dckuserbadge_address: ResourceAddress,
+            dckslap_address: ResourceAddress,
+            gbof_address: ResourceAddress,
             dckslap_per_claim: Decimal,
             claim_interval: i64,
             gbof_per_claim: Decimal,
@@ -128,112 +117,11 @@ mod spank_bank {
             dckslap_per_gbof: u32,
             reddicks_address: ResourceAddress,
             reddicks_per_claim: u32,
-        ) -> (
-            Global<SpankBank>,
-            FungibleBucket,
-            FungibleBucket,
-            ResourceAddress,
-        ) {
-            let (address_reservation, component_address) =
-                Runtime::allocate_component_address(SpankBank::blueprint_id());
-
-            let dckslap_bucket = ResourceBuilder::new_fungible(
-                OwnerRole::Updatable(rule!(require(admin_badge_address)))
-            )
-                .divisibility(DIVISIBILITY_MAXIMUM)
-                .metadata(metadata! {
-                    roles {
-                        metadata_setter => rule!(require(admin_badge_address));
-                        metadata_setter_updater => rule!(require(admin_badge_address));
-                        metadata_locker => rule!(require(admin_badge_address));
-                        metadata_locker_updater => rule!(require(admin_badge_address));
-                    },
-                    init {
-                        "name" => "DCKSLAP", updatable;
-                        "symbol" => "DCKSLAP", updatable;
-                    }
-                })
-                .mint_roles(mint_roles!(
-                    minter => rule!(require(global_caller(component_address)));
-                    minter_updater => rule!(require(admin_badge_address));
-                ))
-                .burn_roles(burn_roles!(
-                    burner => rule!(allow_all);
-                    burner_updater => rule!(require(admin_badge_address));
-                ))
-                .mint_initial_supply(dckslap_initial_supply);
-            let dckslap_resource_manager = FungibleResourceManager::from(
-                dckslap_bucket.resource_address()
-            );
-
-            let gbof_bucket = ResourceBuilder::new_fungible(
-                OwnerRole::Updatable(rule!(require(admin_badge_address)))
-            )
-                .divisibility(DIVISIBILITY_MAXIMUM)
-                .metadata(metadata! {
-                    roles {
-                        metadata_setter => rule!(require(admin_badge_address));
-                        metadata_setter_updater => rule!(require(admin_badge_address));
-                        metadata_locker => rule!(require(admin_badge_address));
-                        metadata_locker_updater => rule!(require(admin_badge_address));
-                    },
-                    init {
-                        "name" => "Great Ball Of Fire", updatable;
-                        "symbol" => "GBOF", updatable;
-                    }
-                })
-                .mint_roles(mint_roles!(
-                    minter => rule!(require(global_caller(component_address)));
-                    minter_updater => rule!(require(admin_badge_address));
-                ))
-                .burn_roles(burn_roles!(
-                    burner => rule!(allow_all);
-                    burner_updater => rule!(require(admin_badge_address));
-                ))
-                .mint_initial_supply(gbof_initial_supply);
-            let gbof_resource_manager = FungibleResourceManager::from(
-                gbof_bucket.resource_address()
-            );
-
-            let dckuserbadge_resource_manager = ResourceBuilder::new_integer_non_fungible::<DckUserBadge>(
-                OwnerRole::Fixed(rule!(require(admin_badge_address)))
-            )
-                .metadata(metadata!(
-                    roles {
-                        metadata_setter => rule!(require(admin_badge_address));
-                        metadata_setter_updater => rule!(require(admin_badge_address));
-                        metadata_locker => rule!(require(admin_badge_address));
-                        metadata_locker_updater => rule!(require(admin_badge_address));
-                    },
-                    init {
-                        "name" => "Dck User Badge", updatable;
-                    }
-                ))
-                .mint_roles(mint_roles!(
-                    minter => rule!(require(global_caller(component_address)));
-                    minter_updater => rule!(require(admin_badge_address));
-                ))
-                .burn_roles(burn_roles!(
-                    burner => rule!(require(global_caller(component_address)));
-                    burner_updater => rule!(require(admin_badge_address));
-                ))
-                .withdraw_roles(withdraw_roles!(
-                    withdrawer => rule!(deny_all);
-                    withdrawer_updater => rule!(require(admin_badge_address));
-                ))
-                .non_fungible_data_update_roles(non_fungible_data_update_roles!(
-                    non_fungible_data_updater => rule!(
-                        require(global_caller(component_address))
-                        || require(bot_badge_address)
-                    );
-                    non_fungible_data_updater_updater => rule!(require(admin_badge_address));
-                ))
-                .create_with_no_initial_supply();
-
-            let spank_bank = Self {
-                dckslap_resource_manager: dckslap_resource_manager,
-                gbof_resource_manager: gbof_resource_manager,
-                dckuserbadge_resource_manager: dckuserbadge_resource_manager,
+        ) -> Global<SpankBank> {
+            Self {
+                dckslap_resource_manager: FungibleResourceManager::from(dckslap_address),
+                gbof_resource_manager: FungibleResourceManager::from(gbof_address),
+                dckuserbadge_resource_manager: NonFungibleResourceManager::from(dckuserbadge_address),
                 dckslap_per_claim: dckslap_per_claim,
                 claim_interval: claim_interval,
                 gbof_per_claim: gbof_per_claim,
@@ -243,24 +131,12 @@ mod spank_bank {
                 dckslap_per_gbof: dckslap_per_gbof,
                 reddicks_vault: FungibleVault::new(reddicks_address),
                 reddicks_per_claim: reddicks_per_claim,
-                next_dckuserbadge_id: 1u64,
                 users: KeyValueStore::new_with_registered_type(),
                 xrd_vault: FungibleVault::new(XRD),
             }
                 .instantiate()
                 .prepare_to_globalize(OwnerRole::Updatable(rule!(require(admin_badge_address))))
-                .roles(roles!(
-                    bot => rule!(require(bot_badge_address));
-                ))
-                .with_address(address_reservation)
-                .globalize();
-
-            (
-                spank_bank,
-                dckslap_bucket,
-                gbof_bucket,
-                dckuserbadge_resource_manager.address(),
-            )
+                .globalize()
         }
 
         /* Internal method to check a user badge proof and return all of the informations
@@ -388,81 +264,6 @@ mod spank_bank {
                 dckslap_bucket,
                 gbof_bucket,
             )
-        }
-
-        /* Mints one or more DckUserBadges and sends them to the specified accounts
-         *
-         * You need the bot badge to invoke this method
-         *
-         * Input parameters:
-         * - key_image_url: the image to set in the non fungible data of the DckUserBadges
-         * - recipients: a vector of accounts that will receive one DckUserBadges each
-         *
-         * Events: a DckUserBadgeMintEvent for each successful distribution
-         *
-         * Note: unsuccessful distributions (because of accounts antispam settings) may cause a
-         * hole in the sequence of DckUserBadges ids
-         */
-        pub fn mint_dckuserbadge(
-            &mut self,
-            key_image_url: Url,
-            mut recipients: Vec<Global<Account>>,
-        ) {
-            self.pay_fees(dec![10]);
-
-            let never = Instant::new(0i64);
-
-            let mut dckuserbadge_sent = 0u64;
-
-            for (i, account) in recipients.iter_mut().enumerate() {
-                let id = self.next_dckuserbadge_id + i as u64;
-
-                let dckuserbadge_bucket = self.dckuserbadge_resource_manager.mint_non_fungible(
-                    &NonFungibleLocalId::integer(id),
-                    DckUserBadge {
-                        key_image_url: key_image_url.clone(),
-                        has_dicks: true,
-                        last_claim_time: never,
-                    }
-                );
-
-                let refund = account.try_deposit_or_refund(
-                    dckuserbadge_bucket.into(),
-                    None
-                );
-
-                match refund {
-                    Some(bucket) => bucket.burn(),
-                    None => {
-                        Runtime::emit_event(
-                           DckUserBadgeMintEvent {
-                                id: id,
-                                account: *account,
-                            }
-                        );
-
-                        dckuserbadge_sent += 1u64;
-
-                        self.users.insert(
-                            id,
-                            User {
-                                account: *account,
-                                claims: 0u32,
-                                burned_dckslap: 0u32,
-                                gbof_free_claims: 0u32,
-                                gbof_paid_claims: 0u32,
-                            }
-                        );
-                    }
-                }
-            }
-
-            assert!(
-                dckuserbadge_sent > 0,
-                "No DckUserBadge sent"
-            );
-
-            self.next_dckuserbadge_id += recipients.len() as u64;
         }
 
         /* Claim DCKSLAP and eventually GBOF

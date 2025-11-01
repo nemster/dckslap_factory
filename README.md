@@ -7,15 +7,12 @@ The `claim_interval` set in the `new` method determines how often a user can do 
 The `<GBOF_FIRST_CLAIM>`, `<GBOF_CLAIM_INCREASE>` and `<GBOF_CLAIM_INCREASE_INCREASE>` parameters determine whether the claim returns `GBOF` too.  
 As an example setting `<GBOF_FIRST_CLAIM>`=69, `<GBOF_CLAIM_INCREASE>`=69 and `<GBOF_CLAIM_INCREASE_INCREASE>`=28, will make so that only the claims number 69, 69+69+28=166, 166+69+28+28=291, 291+69+28+28+28=444, ... will return `GBOF` (quadratic backoff).  
 
-Offchain script are needed to tell the component who to send the `Dck User Badge` to and to enable/disable them (`has_dicks` non fungible data).  
-The same `bot badge` is needed to update `Dck User Bagde` non fungible data and invoke the `mint_dckuserbadge` method.  
-
 A user can also pay with `REDDICKS` for an additonal `DCKSLAP` claim; the parameter `<REDDICKS_PER_CLAIM>` is the price to pay.  
 
 It is also possible to burn `DCKSLAP` (one at a time); when the user has burned enough `DCKSLAP` (`dckslap_per_gbof` parameter) a `GBOF` claim happens.  
 
 ## `new`
-Use this function to instatiate a new SpankBank component and mint an initial supply of both `DCKSLAP` and `GBOF`.  
+Use this function to instatiate a new SpankBank component.  
 
 ```
 CALL_FUNCTION
@@ -23,9 +20,9 @@ CALL_FUNCTION
     "SpankBank"
     "new"
     Address("<ADMIN_BADGE_ADDRESS>")
-    Address("<BOT_BADGE_ADDRESS>")
-    Decimal("<DCKSLAP_INITIAL_SUPPLY>")
-    Decimal("<GBOF_INITIAL_SUPPLY>")
+    Address("<DCKUSERBADGE_ADDRESS>")
+    Address("<DCKSLAP_ADDRESS>")
+    Address("<GBOF_ADDRESS>")
     Decimal("<DCKSLAP_PER_CLAIM>")
     <CLAIM_INTERVAL>i64
     Decimal("<GBOF_PER_CLAIM>")
@@ -45,9 +42,9 @@ CALL_METHOD
 
 `<PACKAGE_ADDRESS>`: the address of the package containing the `SpankBank` blueprint.  
 `<ADMIN_BADGE_ADDRESS>`: this resource address will be the owner of the component and the resources.  
-`<BOT_BADGE_ADDRESS>`: a proof of this resource address will be needed to call the `mint_dckuserbadge` method.  
-`<DCKSLAP_INITIAL_SUPPLY>`: the initial supply of `DCKSLAP` that will be returned by this function.  
-`<GBOF_INITIAL_SUPPLY>`: the initial supply of `GBOF` that will be returned by this function.  
+`<DCKUSERBADGE_ADDRESS>`: resource address of the `Dck User Badge`.  
+`<DCKSLAP_ADDRESS>`: resource address of `DCKSLAP`.  
+`<GBOF_ADDRESS>`: resource address of `GBOF`.  
 `<DCKSLAP_PER_CLAIM>`: how many `DCKSLAP` distribute at each successful claim.  
 `<CLAIM_INTERVAL>`: interval in seconds between claims from the same account.  
 `<GBOF_PER_CLAIM>`: how many `GBOF` distribute at each distribution.  
@@ -58,39 +55,6 @@ CALL_METHOD
 `<REDDICKS_ADDRESS>`: the resource address of the `REDDICKS` coin  
 `<REDDICKS_PER_CLAIM>`: how many `REDDICKS` a user has to pay for an additional claim  
 `<ACCOUNT_ADDRESS>`: the account to deposit the initial supply in.  
-
-## `mint_dckuserbadge`
-Invoke this method to mint one or more `Dck User Badge` and send them to the specified account(s)  
-
-```
-CALL_METHOD
-    Address("<BOT_ACCOUNT_ADDRESS>")
-    "create_proof_of_amount"
-    Address("<BOT_BADGE_ADDRESS>")
-    Decimal("1")
-; 
-CALL_METHOD
-    Address("<COMPONENT_ADDRESS>")
-    "mint_dckuserbadge"
-    "<IMAGE_URL>"
-    Array<Address>(
-        Address("<ACCOUNT_ADDRESS>")
-    )
-;
-```
-
-`<BOT_ACCOUNT_ADDRESS>`: address of the account used by the bot.  
-`<BOT_BADGE_ADDRESS>`: resource address of the bot badge specified when calling the `new` function.  
-`<COMPONENT_ADDRESS>`: the component created by the `new` function.  
-`<IMAGE_URL>`: the URL of the image to use as `key_image_url` in the NFT.  
-`<ACCOUNT_ADDRESS>`: the address of the account to send the `Dck User Badge` to.  
-
-This method emits a `DckUserBadgeMintEvent` event for each recipient.  
-The event contains the account address and the unique numeric id of the sent `Dck User Badge`.  
-
-If the recipient account has antispam settings that prevent this method to send it the `Dck User Badge`, then the minted `Dck User Badge` is burned. This may cause a "hole" in the id sequence if in the same call there are successful and unsuccessful recipients.  
-
-Only if no recipent is successful, the transaction fails.  
 
 ## `claim`
 A user can call this method to get some `DCKSLAP` and eventually some `GBOF` too.  
