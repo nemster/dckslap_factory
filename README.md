@@ -2,7 +2,8 @@
 
 SpankBank is a blueprint to manage the distribution of two fungibles (`DCKSLAP` and `GBOF`) and a non fungible (`Dck User Badge`) that is needed to keep track of users' claims.  
 `DCKSLAP` can be claimed periodically by the users who own the non fungible; the claim operation eventually returns some `GBOF` too.  
-The `claim_interval` set in the `new` method determines how often a user can do a claim.  
+The `<CLAIM_GROUP_INTERVAL>` value in the `new` method determines how often a user can do a group of claims.  
+A grup of claims is composed of up to `<CLAIMS_PER_GROUP>` claims.  
 
 The `<GBOF_FIRST_CLAIM>`, `<GBOF_CLAIM_INCREASE>` and `<GBOF_CLAIM_INCREASE_INCREASE>` parameters determine whether the claim returns `GBOF` too.  
 As an example setting `<GBOF_FIRST_CLAIM>`=69, `<GBOF_CLAIM_INCREASE>`=69 and `<GBOF_CLAIM_INCREASE_INCREASE>`=28, will make so that only the claims number 69, 69+69+28=166, 166+69+28+28=291, 291+69+28+28+28=444, ... will return `GBOF` (quadratic backoff).  
@@ -24,7 +25,8 @@ CALL_FUNCTION
     Address("<DCKSLAP_ADDRESS>")
     Address("<GBOF_ADDRESS>")
     Decimal("<DCKSLAP_PER_CLAIM>")
-    <CLAIM_INTERVAL>i64
+    <CLAIMS_PER_GROUP>u32
+    <CLAIM_GROUP_INTERVAL>i64
     Decimal("<GBOF_PER_CLAIM>")
     <GBOF_FIRST_CLAIM>u32
     <GBOF_CLAIM_INCREASE>u32
@@ -46,7 +48,8 @@ CALL_METHOD
 `<DCKSLAP_ADDRESS>`: resource address of `DCKSLAP`.  
 `<GBOF_ADDRESS>`: resource address of `GBOF`.  
 `<DCKSLAP_PER_CLAIM>`: how many `DCKSLAP` distribute at each successful claim.  
-`<CLAIM_INTERVAL>`: interval in seconds between claims from the same account.  
+`<CLAIMS_PER_GROUP>`; how many claims an account can perform in a `<CLAIM_GROUP_INTERVAL>`.  
+`<CLAIM_GROUP_INTERVAL>`: interval in seconds between claim groups from the same account.  
 `<GBOF_PER_CLAIM>`: how many `GBOF` distribute at each distribution.  
 `<GBOF_FIRST_CLAIM>`: how many successful `DCKSLAP` claims are needed for the first GBOF distribution.  
 `<GBOF_CLAIM_INCREASE>`: fixed increase in claims for the next `GBOF` distribution.  
@@ -88,11 +91,8 @@ CALL_METHOD
 
 This method fails if less than `claim_interval` seconds has passed since the last claim from this user or if the `has_dicks` non fungible data in the `Dck User Badge` is false.  
 
-Upon success the `claim` method emits a `DckslapClaimEvent` event specifying the account address and the number of claims from this account.  
-If `GBOFs` are returned too, this method will emit a `GbofClaimEvent` event too specifying the account address and the number of times this account has received `GBOFs`.  
-
 ## `burn`
-A user can invoke this method to burn a `DCKSLAP` and eventually obtain a `GBOF`
+A user can invoke this method to burn a `DCKSLAP` and eventually obtain a `GBOF`  
 
 ```
 CALL_METHOD
@@ -133,8 +133,8 @@ CALL_METHOD
 `<DCKUSERBADGE_ID>`: numeric id of the `Dck User Badge` in the user's account.  
 `<COMPONENT_ADDRESS>`: the component created by the `new` function.  
 
-A `GBOF` is returned when the user has burned `<DCKSLAP_PER_GBOF>` `DCKSLAP`; in this case a `GbofClaimEvent` event is emitted. The event contains user's account address and the number of times this account has received `GBOFs`.  
-If the user burns multiple `DCKSLAP` in a single operation those will be counted as just one; so he really needs to invoke this method `<DCKSLAP_PER_GBOF>` times.  
+A `GBOF` is returned when the user has burned `<DCKSLAP_PER_GBOF>` `DCKSLAP`.  
+If the user provides multiple `DCKSLAP` in a single operation, the excess `DCKSLAP` will be returned.  
 
 ## `pay_claim`
 A user can call this method to pay for an unscheduled `DCKSLAP` claim paying with `REDDICKS`  
@@ -144,7 +144,7 @@ CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
     "withdraw"
     Address("<REDDICKS_ADDRESS>")
-    Decimal("1")
+    Decimal("<REDDICKS_AMOUNT>")
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("<REDDICKS_ADDRESS>")
@@ -174,12 +174,13 @@ CALL_METHOD
 
 `<ACCOUNT_ADDRESS>`: address of the user account.  
 `<REDDICKS_ADDRESS>`: resource address of `REDDICKS` coins.  
+`<REDDICKS_AMOUNT>`: the amount of `REDDICKS` to pass to the component, this should be `<REDDICKS_PER_CLAIM>`.  
 `<DCKUSERBADGE_ADDRESS>`: resource address of the `Dck User Badge`.  
 `<DCKUSERBADGE_ID>`: numeric id of the `Dck User Badge` in the user's account.  
 `<COMPONENT_ADDRESS>`: the component created by the `new` function.  
 
-A `DckslapClaimEvent` event is emitted. The event contains user's account address and the number of times this account has received `DCKSLAPs`.  
-This method eventually returns `GBOF` too and emits a `GbofClaimEvent` event.  
+This method returns `<DCKSLAP_PER_CLAIM>` `DCKSLAP` and eventually `<GBOF_PER_CLAIM>` `GBOF` too.  
+If the user provides more than `<REDDICKS_PER_CLAIM>` `REDDICKS` in a single operation, the excess `REDDICKS` will be returned.  
 
 ## `mint`
 The admin can invoke this method to mint new `DCKSLAP` and/or `GBOF`.  
@@ -263,7 +264,7 @@ CALL_METHOD
 
 ## `update_settings`
 Use this function to instatiate a new SpankBank component and mint an initial supply of both `DCKSLAP` and `GBOF`.  
-    
+
 ```
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -275,18 +276,20 @@ CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "update_settings"
     Decimal("<DCKSLAP_PER_CLAIM>")
-    <CLAIM_INTERVAL>i64
+    <CLAIMS_PER_GROUP>u32
+    <CLAIM_GROUP_INTERVAL>i64
     Decimal("<GBOF_PER_CLAIM>")
     <GBOF_FIRST_CLAIM>u32
     <GBOF_CLAIM_INCREASE>u32
     <GBOF_CLAIM_INCREASE_INCREASE>u32
     <DCKSLAP_PER_GBOF>u32
     <REDDICKS_PER_CLAIM>u32
-;   
-``` 
+;
+```
 
 `<DCKSLAP_PER_CLAIM>`: how many `DCKSLAP` distribute at each successful claim.  
-`<CLAIM_INTERVAL>`: interval in seconds between claims from the same account.  
+`<CLAIMS_PER_GROUP>`; how many claims an account can perform in a `<CLAIM_GROUP_INTERVAL>`.  
+`<CLAIM_GROUP_INTERVAL>`: interval in seconds between claims from the same account.  
 `<GBOF_PER_CLAIM>`: how many `GBOF` distribute at each distribution.  
 `<GBOF_FIRST_CLAIM>`: how many successful `DCKSLAP` claims are needed for the first GBOF distribution.  
 `<GBOF_CLAIM_INCREASE>`: fixed increase in claims for the next `GBOF` distribution.  

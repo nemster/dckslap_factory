@@ -10,32 +10,14 @@ struct DckUserBadge {
     pub last_claim_time: Instant,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
-struct DckslapClaimEvent {
-    account: Global<Account>,
-    claims_from_account: u32,
-}
-
-#[derive(ScryptoSbor, ScryptoEvent)]
-struct GbofClaimEvent {
-    account: Global<Account>,
-    claims_from_account: u32,
-}
-
 #[derive(ScryptoSbor, Clone)]
 struct User {
-    account: Global<Account>,
     claims: u32,
+    claims_current_group: u32,
     burned_dckslap: u32,
-    gbof_free_claims: u32,
-    gbof_paid_claims: u32,
 }
 
 #[blueprint]
-#[events(
-    DckslapClaimEvent,
-    GbofClaimEvent,
-)]
 #[types(
     u64,
     User,
@@ -62,7 +44,8 @@ mod spank_bank {
         gbof_resource_manager: FungibleResourceManager,
         dckuserbadge_resource_manager: NonFungibleResourceManager,
         dckslap_per_claim: Decimal,
-        claim_interval: i64,
+        claims_per_group: u32,
+        claim_group_interval: i64,
         gbof_per_claim: Decimal,
         gbof_first_claim: u32,
         gbof_claim_increase: u32,
@@ -85,7 +68,8 @@ mod spank_bank {
          * - dckslap_address: resource address of DCKSLAP
          * - gbof_address: resource address of GBOF
          * - dckslap_per_claim: how many DCKSLAP distribute at each successful claim
-         * - claim_interval: interval in seconds between claims from the same account
+         * - claims_per_group: how many claims can an account do in a period of time
+         * - claim_group_interval: interval in seconds between claim groups from the same account
          * - gbof_per_claim: how many GBOF distribute at each distribution
          * - gbof_first_claim: how many successful DCKSLAP claims are needed for the first GBOF
          * distribution
@@ -99,9 +83,6 @@ mod spank_bank {
          *
          * Outputs:
          * - the globalised SpankBank component
-         * - a bucket of DCKSLAP
-         * - a bucket of Great Ball Of Fire
-         * - the resource address of the DckUserBadges that will be minted by mint_dckuserbadge
          */
         pub fn new(
             admin_badge_address: ResourceAddress,
@@ -109,7 +90,8 @@ mod spank_bank {
             dckslap_address: ResourceAddress,
             gbof_address: ResourceAddress,
             dckslap_per_claim: Decimal,
-            claim_interval: i64,
+            claims_per_group: u32,
+            claim_group_interval: i64,
             gbof_per_claim: Decimal,
             gbof_first_claim: u32,
             gbof_claim_increase: u32,
@@ -123,7 +105,8 @@ mod spank_bank {
                 gbof_resource_manager: FungibleResourceManager::from(gbof_address),
                 dckuserbadge_resource_manager: NonFungibleResourceManager::from(dckuserbadge_address),
                 dckslap_per_claim: dckslap_per_claim,
-                claim_interval: claim_interval,
+                claims_per_group: claims_per_group,
+                claim_group_interval: claim_group_interval,
                 gbof_per_claim: gbof_per_claim,
                 gbof_first_claim: gbof_first_claim,
                 gbof_claim_increase: gbof_claim_increase,
@@ -152,7 +135,7 @@ mod spank_bank {
          * - internal information about the user stored in the users KVS
          */
         fn check_user_badge(
-            &self,
+            &mut self,
             dckuserbadge_proof: Proof,
         ) -> (
             DckUserBadge,
@@ -181,13 +164,27 @@ mod spank_bank {
                 _ => Runtime::panic("Should not happen".to_string()),
             };
 
-            let user = self.users.get(&id).unwrap();
+            let user = match self.users.get(&id) {
+                Some(user) => user.clone(),
+
+                None => {
+                    let user = User {
+                        claims: 0,
+                        claims_current_group: 0,
+                        burned_dckslap: 0,
+                    };
+
+                    self.users.insert(id, user.clone());
+
+                    user
+                },
+            };
 
             (
                 non_fungible_data,
                 local_id,
                 id,
-                user.clone(),
+                user,
             )
         }
 
@@ -214,10 +211,6 @@ mod spank_bank {
          * Outputs:
          * - a bucket of DCKSLAP
          * - a bucket of GBOF or None
-         *
-         * Events:
-         * - a DckslapClaimEvent
-         * - eventually a GbofClaimEvent
          */
         fn do_claim(
             &mut self,
@@ -228,13 +221,6 @@ mod spank_bank {
 
             let dckslap_bucket = self.dckslap_resource_manager.mint(self.dckslap_per_claim);
 
-            Runtime::emit_event(
-                DckslapClaimEvent {
-                    account: user.account,
-                    claims_from_account: user.claims,
-                }
-            );
-
             let mut n = 1u32;
             let mut next_gbof_claim = self.gbof_first_claim;
             while user.claims > next_gbof_claim {
@@ -242,18 +228,7 @@ mod spank_bank {
                 n += 1;
             }
             let gbof_bucket = match user.claims == next_gbof_claim {
-                true => {
-                    user.gbof_free_claims = n;
-
-                    Runtime::emit_event(
-                        GbofClaimEvent {
-                            account: user.account,
-                            claims_from_account: n + user.gbof_paid_claims,
-                        }
-                    );
-
-                    Some(self.gbof_resource_manager.mint(self.gbof_per_claim))
-                },
+                true => Some(self.gbof_resource_manager.mint(self.gbof_per_claim)),
 
                 false => None,
             };
@@ -268,16 +243,15 @@ mod spank_bank {
 
         /* Claim DCKSLAP and eventually GBOF
          *
+         * This method updates the user struct but doesn't save it in the users KVS, the do_claim
+         * method will take care of this
+         *
          * Input parameters:
          * - dckuserbadge_proof: a proof of ownership of a DckUserBadge
          *
          * Outputs:
          * - a bucket of DCKSLAP
          * - a bucket of GBOF or None
-         *
-         * Events:
-         * - a DckslapClaimEvent
-         * - eventually a GbofClaimEvent
          */
         pub fn claim(
             &mut self,
@@ -288,20 +262,31 @@ mod spank_bank {
         ) {
             self.pay_fees(dec![1]);
 
-            let (non_fungible_data, local_id, id, user) = self.check_user_badge(dckuserbadge_proof);
+            let (non_fungible_data, local_id, id, mut user) = self.check_user_badge(dckuserbadge_proof);
 
             let now = Clock::current_time_rounded_to_seconds();
-            assert!(
-                non_fungible_data.last_claim_time.seconds_since_unix_epoch + self.claim_interval
-                    <= now.seconds_since_unix_epoch,
-                "Too soon"
-            );
 
-            self.dckuserbadge_resource_manager.update_non_fungible_data(
-                &local_id,
-                "last_claim_time",
-                now
-            );
+
+            if non_fungible_data.last_claim_time.seconds_since_unix_epoch
+                + self.claim_group_interval <= now.seconds_since_unix_epoch {
+
+                assert!(
+                    user.claims_current_group < self.claims_per_group,
+                    "No more free claims today"
+                );
+
+                user.claims_current_group += 1;
+
+            } else {
+
+                self.dckuserbadge_resource_manager.update_non_fungible_data(
+                    &local_id,
+                    "last_claim_time",
+                    now
+                );
+
+                user.claims_current_group = 1;
+            }
 
             self.do_claim(id, user)
         }
@@ -315,9 +300,6 @@ mod spank_bank {
          * Outputs:
          * - a bucket of GBOF or None
          * - a bucket containing eventual excess DCKSLAP
-         *
-         * Events:
-         * - eventually a GbofClaimEvent event
          */
         pub fn burn(
             &mut self,
@@ -340,14 +322,6 @@ mod spank_bank {
             let gbof_bucket = match user.burned_dckslap >= self.dckslap_per_gbof {
                 true => {
                     user.burned_dckslap = 0;
-                    user.gbof_paid_claims += 1;
-
-                    Runtime::emit_event(
-                        GbofClaimEvent {
-                            account: user.account,
-                            claims_from_account: user.gbof_free_claims + user.gbof_paid_claims,
-                        }
-                    );
 
                     Some(self.gbof_resource_manager.mint(dec![1]))
                 },
@@ -372,9 +346,6 @@ mod spank_bank {
          * - a bucket of DCKSLAP
          * - a bucket of GBOF or None
          * - a bucket of eventual excess REDDICKS
-         *
-         * Events:
-         * - a DckslapClaimEvent
          */
         pub fn pay_claim(
             &mut self,
@@ -452,7 +423,8 @@ mod spank_bank {
          *
          * Input parameters:
          * - dckslap_per_claim: how many DCKSLAP distribute at each successful claim
-         * - claim_interval: interval in seconds between claims from the same account
+         * - claims_per_group: how many claims can an account do in a period of time
+         * - claim_group_interval: interval in seconds between claim groups from the same account
          * - gbof_per_claim: how many GBOF distribute at each distribution
          * - gbof_first_claim: how many successful DCKSLAP claims are needed for the first GBOF
          * distribution
@@ -466,7 +438,8 @@ mod spank_bank {
         pub fn update_settings(
             &mut self,
             dckslap_per_claim: Decimal,
-            claim_interval: i64,
+            claims_per_group: u32,
+            claim_group_interval: i64,
             gbof_per_claim: Decimal,
             gbof_first_claim: u32,
             gbof_claim_increase: u32,
@@ -475,7 +448,8 @@ mod spank_bank {
             reddicks_per_claim: u32,
         ) {
             self.dckslap_per_claim = dckslap_per_claim;
-            self.claim_interval = claim_interval;
+            self.claims_per_group = claims_per_group;
+            self.claim_group_interval = claim_group_interval;
             self.gbof_per_claim = gbof_per_claim;
             self.gbof_first_claim = gbof_first_claim;
             self.gbof_claim_increase = gbof_claim_increase;
