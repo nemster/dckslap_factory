@@ -35,11 +35,6 @@ CALL_FUNCTION
     Address("<REDDICKS_ADDRESS>")
     <REDDICKS_PER_CLAIM>u32
 ;
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "deposit_batch"
-    Expression("ENTIRE_WORKTOP")
-;
 ```
 
 `<PACKAGE_ADDRESS>`: the address of the package containing the `SpankBank` blueprint.  
