@@ -326,12 +326,13 @@ mod spank_bank {
 
 
             if non_fungible_data.last_claim_time.seconds_since_unix_epoch
-                + self.claim_group_interval <= now.seconds_since_unix_epoch {
+                + self.claim_group_interval > now.seconds_since_unix_epoch {
 
                 assert!(
                     user.claims_current_group < self.claims_per_group,
                     "No more free claims today"
                 );
+
 
                 user.claims_current_group += 1;
 
