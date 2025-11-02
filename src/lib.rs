@@ -59,11 +59,12 @@ mod spank_bank {
 
     impl SpankBank {
 
-        /* Instatiates a new SpankBank component.
+        /* Instatiates a new SpankBank component and changes permissione on existing resources so
+         * that it can manage them.
          *
          * Input parameters:
-         * - admin_badge_address: this resource address will be the owner of the component and
-         * the resources
+         * - admin_badge_bucket: the badge to manage the existing resources
+         * - bot_badge_address: resource address of the bot badge
          * - dckuserbadge_address: resource address of the Dck User Badge
          * - dckslap_address: resource address of DCKSLAP
          * - gbof_address: resource address of GBOF
@@ -83,9 +84,11 @@ mod spank_bank {
          *
          * Outputs:
          * - the globalised SpankBank component
+         * - the privided admin badge bucket
          */
         pub fn new(
-            admin_badge_address: ResourceAddress,
+            admin_badge_bucket: FungibleBucket,
+            bot_badge_address: ResourceAddress,
             dckuserbadge_address: ResourceAddress,
             dckslap_address: ResourceAddress,
             gbof_address: ResourceAddress,
@@ -99,11 +102,60 @@ mod spank_bank {
             dckslap_per_gbof: u32,
             reddicks_address: ResourceAddress,
             reddicks_per_claim: u32,
-        ) -> Global<SpankBank> {
-            Self {
-                dckslap_resource_manager: FungibleResourceManager::from(dckslap_address),
-                gbof_resource_manager: FungibleResourceManager::from(gbof_address),
-                dckuserbadge_resource_manager: NonFungibleResourceManager::from(dckuserbadge_address),
+        ) -> (
+            Global<SpankBank>,
+            FungibleBucket
+        ) {
+            let admin_badge_address = admin_badge_bucket.resource_address();
+
+            let (address_reservation, component_address) =
+                Runtime::allocate_component_address(SpankBank::blueprint_id());
+
+            let dckuserbadge_resource_manager = NonFungibleResourceManager::from(dckuserbadge_address);
+
+            admin_badge_bucket.authorize_with_amount(
+                1,
+                || dckuserbadge_resource_manager.set_updatable_non_fungible_data(
+                    rule!(
+                        require(global_caller(component_address))
+                        || require(bot_badge_address)
+                    )
+                )
+            );
+
+            let dckslap_resource_manager = FungibleResourceManager::from(dckslap_address);
+           
+            admin_badge_bucket.authorize_with_amount(
+                1,
+                || {
+                    dckslap_resource_manager.set_mintable(
+                        rule!(
+                            require(global_caller(component_address))
+                        )
+                    );
+                    dckslap_resource_manager.set_burnable(
+                        rule!(
+                            require(global_caller(component_address))
+                        )
+                    );
+                }
+            );
+
+            let gbof_resource_manager = FungibleResourceManager::from(gbof_address);
+            
+            admin_badge_bucket.authorize_with_amount(
+                1,
+                || gbof_resource_manager.set_mintable(
+                    rule!(
+                        require(global_caller(component_address))
+                    )
+                )
+            );
+
+            let spank_bank = Self {
+                dckslap_resource_manager: dckslap_resource_manager,
+                gbof_resource_manager: gbof_resource_manager,
+                dckuserbadge_resource_manager: dckuserbadge_resource_manager,
                 dckslap_per_claim: dckslap_per_claim,
                 claims_per_group: claims_per_group,
                 claim_group_interval: claim_group_interval,
@@ -119,7 +171,13 @@ mod spank_bank {
             }
                 .instantiate()
                 .prepare_to_globalize(OwnerRole::Updatable(rule!(require(admin_badge_address))))
-                .globalize()
+                .with_address(address_reservation)
+                .globalize();
+
+            (
+                spank_bank,
+                admin_badge_bucket,
+            )
         }
 
         /* Internal method to check a user badge proof and return all of the informations

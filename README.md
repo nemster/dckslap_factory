@@ -13,14 +13,25 @@ A user can also pay with `REDDICKS` for an additonal `DCKSLAP` claim; the parame
 It is also possible to burn `DCKSLAP` (one at a time); when the user has burned enough `DCKSLAP` (`dckslap_per_gbof` parameter) a `GBOF` claim happens.  
 
 ## `new`
-Use this function to instatiate a new SpankBank component.  
+Use this function to instatiate a new SpankBank component and changes permissions on existing resources so that it can manage them. An admin badge is needed to do that, the admin badge will be returned by the function at the end.   
 
 ```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<ADMIN_BADGE_ADDRESS>")
+    Decimal("1")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<ADMIN_BADGE_ADDRESS>")
+    Bucket("admin_badge")
+;
 CALL_FUNCTION
     Address("<PACKAGE_ADDRESS>")
     "SpankBank"
     "new"
-    Address("<ADMIN_BADGE_ADDRESS>")
+    Bucket("admin_badge")
+    Address("<BOT_BADGE_ADDRESS>")
     Address("<DCKUSERBADGE_ADDRESS>")
     Address("<DCKSLAP_ADDRESS>")
     Address("<GBOF_ADDRESS>")
@@ -35,10 +46,17 @@ CALL_FUNCTION
     Address("<REDDICKS_ADDRESS>")
     <REDDICKS_PER_CLAIM>u32
 ;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
 ```
 
+`<ACCOUNT_ADDRESS>`: the account that holds the admin badge.  
+`<ADMIN_BADGE_ADDRESS>`: the resource address of the badge needed to update permissions on resources.  
+`<BOT_BADGE_ADDRESS>`: the resource address of the bot address (this is needed to set proper permissions on the other resources).  
 `<PACKAGE_ADDRESS>`: the address of the package containing the `SpankBank` blueprint.  
-`<ADMIN_BADGE_ADDRESS>`: this resource address will be the owner of the component and the resources.  
 `<DCKUSERBADGE_ADDRESS>`: resource address of the `Dck User Badge`.  
 `<DCKSLAP_ADDRESS>`: resource address of `DCKSLAP`.  
 `<GBOF_ADDRESS>`: resource address of `GBOF`.  
@@ -52,7 +70,6 @@ CALL_FUNCTION
 `<DCKSLAP_PER_GBOF>`: the number of `DCKSLAP` a user can burn to get a `GBOF`
 `<REDDICKS_ADDRESS>`: the resource address of the `REDDICKS` coin  
 `<REDDICKS_PER_CLAIM>`: how many `REDDICKS` a user has to pay for an additional claim  
-`<ACCOUNT_ADDRESS>`: the account to deposit the initial supply in.  
 
 ## `claim`
 A user can call this method to get some `DCKSLAP` and eventually some `GBOF` too.  
